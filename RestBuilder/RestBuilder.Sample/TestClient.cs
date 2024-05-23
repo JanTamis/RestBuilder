@@ -8,5 +8,5 @@ public partial class TestClient
 {
 	[Get("User")]
 	[AllowAnyStatusCode]
-	public partial Task<string> GetUserAsync([Query] int id, CancellationToken token);
+	public partial Task<string> GetUserAsync([Header("userId")] int id, CancellationToken token);
 }

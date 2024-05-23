@@ -57,8 +57,9 @@ public static class ClassParser
 								{
 									Location = y.AttributeClass.Name switch
 									{
-										nameof(Literals.QueryAttribute) => HttpLocation.Query,
-										_ => HttpLocation.Query
+										nameof(Literals.QueryAttribute)  => HttpLocation.Query,
+										nameof(Literals.HeaderAttribute) => HttpLocation.Header,
+										_                                => HttpLocation.Query
 									},
 									Format = y.GetValue("Format", String.Empty),
 									Name = y.GetValue<string?>(0, null) ?? y.GetValue<string?>("Name", null),
@@ -136,10 +137,10 @@ public static class ClassParser
 		{
 			return String.Empty;
 		}
-		
+
 		return type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
 	}
-	
+
 	private static IEnumerable<AttributeData> GetByName(this ImmutableArray<AttributeData> attributes, string name)
 	{
 		return attributes.Where(w => w.AttributeClass.Name.Replace(nameof(Attribute), String.Empty) == name);
@@ -156,7 +157,7 @@ public static class ClassParser
 
 		if (result?.GetType() == typeof(T))
 		{
-			return (T)result;
+			return (T) result;
 		}
 
 		return defaultValue;
@@ -173,7 +174,7 @@ public static class ClassParser
 
 		if (result?.GetType() == typeof(T))
 		{
-			return (T)result;
+			return (T) result;
 		}
 
 		return defaultValue;

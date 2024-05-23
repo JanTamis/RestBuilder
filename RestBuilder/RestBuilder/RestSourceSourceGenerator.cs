@@ -38,17 +38,21 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
 			"QuerySerializationMethod.g.cs",
 			SourceText.From(Literals.QuerySerializationMethod, Encoding.UTF8)));
-		
+
 		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
 			"AllowAnyStatusCodeAttribute.g.cs",
 			SourceText.From(Literals.AllowAnyStatusCodeAttribute, Encoding.UTF8)));
-		
+
+		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
+			"HeaderAttribute.g.cs",
+			SourceText.From(Literals.HeaderAttribute, Encoding.UTF8)));
+
 		var classes = context.SyntaxProvider
 			.ForAttributeWithMetadataName(
 				$"{Literals.BaseNamespace}.{Literals.BaseAddressAttribute}",
 				(node, token) => node is ClassDeclarationSyntax classDeclaration && classDeclaration.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)),
 				GenerateSource);
-		
+
 		context.RegisterSourceOutput(classes,
 			static (spc, source) => Execute(source, spc));
 	}
@@ -57,7 +61,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 	{
 		return ClassParser.Parse(context.TargetNode as ClassDeclarationSyntax, context.TargetSymbol as INamedTypeSymbol, context.Attributes, context.SemanticModel.Compilation);
 	}
-	
+
 	private static void Execute(ClassModel source, SourceProductionContext context)
 	{
 		var builder = new SourceWriter('\t', 1);
@@ -78,7 +82,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			.Distinct()
 			.OrderBy(o => o)
 			.Select(s => $"using {s};");
-		
+
 		builder.WriteLine($$"""
 			{{String.Join("\n", namespaces)}}
 
@@ -91,7 +95,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 					BaseAddress = new Uri("{{source.BaseAddress}}"),
 				};
 			""");
-		
+
 		foreach (var method in source.Methods)
 		{
 			var returnType = "Task";
@@ -106,11 +110,11 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			{
 				returnType = $"Task<{method.ReturnType}>";
 			}
-			
+
 			builder.WriteLine();
 
 			builder.Indentation++;
-			
+
 			builder.WriteLine($"public partial async {returnType} {method.Name}({String.Join(", ", method.Parameters.Select(s => $"{s.Type} {s.Name}"))})");
 			builder.WriteLine('{');
 			builder.Indentation++;
@@ -129,7 +133,35 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			else
 			{
 				builder.WriteLine($"using var request = new HttpRequestMessage(HttpMethod.{method.Method?.Method ?? "Get"}, {ParsePath(method.Path, method.Parameters)});");
-				
+
+				var headers = method.Parameters
+					.Where(w => w.Location.Location == HttpLocation.Header)
+					.ToLookup(g => g.IsNullable);
+
+				if (headers.Any())
+				{
+					if (headers[false].Any())
+					{
+						builder.WriteLine();
+					}
+					
+					foreach (var header in headers[false])
+					{
+						builder.WriteLine($"request.Headers.Add(\"{header.Location.Name}\", {header.Name}.ToString());");
+					}
+					
+					foreach (var header in headers[true])
+					{
+						builder.WriteLine();
+						builder.WriteLine($"if ({header.Name} != null)");
+						builder.WriteLine('{');
+						builder.WriteLine($"\trequest.Headers.Add(\"{header.Location.Name}\", {header.Name}.ToString());");
+						builder.WriteLine('}');
+					}
+
+					builder.WriteLine();
+				}
+
 				if (method.ReturnType is nameof(HttpResponseMessage))
 				{
 					builder.WriteLine($"var response = await Client.SendAsync(request, {tokenText});");
@@ -177,7 +209,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 					break;
 				}
 			}
-			
+
 			builder.Indentation--;
 			builder.WriteLine('}');
 		}
@@ -185,7 +217,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		builder.Indentation = Math.Max(builder.Indentation - 1, 0);
 
 		builder.WriteLine('}');
-		
+
 		context.AddSource($"{source.Name}.g.cs", builder.ToSourceText());
 	}
 
@@ -195,10 +227,10 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 		path = AddQueryString(path, parameters
 			.Where(w => w.Location.Location == HttpLocation.Query && !w.IsNullable)
-			.Select(s => new KeyValuePair<string, string>(s.Location.Name ?? s.Name, String.IsNullOrEmpty(s.Location.Format) 
-				? $"{{{s.Name}}}" 
+			.Select(s => new KeyValuePair<string, string>(s.Location.Name ?? s.Name, String.IsNullOrEmpty(s.Location.Format)
+				? $"{{{s.Name}}}"
 				: $"{{{s.Name}:{s.Location.Format}}}")));
-	
+
 		// foreach (var parameter in parameters)
 		// {
 		// 	if (parameter.Location == HttpLocation.Path)
@@ -232,7 +264,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 		var sb = new StringBuilder();
 		sb.Append(uriToBeAppended.ToString());
-		
+
 		foreach (var parameter in queryString)
 		{
 			if (parameter.Value == null)
