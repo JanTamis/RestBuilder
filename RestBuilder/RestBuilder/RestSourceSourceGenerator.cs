@@ -46,7 +46,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		var classes = context.SyntaxProvider
 			.ForAttributeWithMetadataName(
 				$"{Literals.BaseNamespace}.{Literals.BaseAddressAttribute}",
-				(node, token) => true,
+				(node, token) => node is ClassDeclarationSyntax classDeclaration && classDeclaration.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)),
 				GenerateSource);
 		
 		context.RegisterSourceOutput(classes,
@@ -55,7 +55,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 	private ClassModel GenerateSource(GeneratorAttributeSyntaxContext context, CancellationToken token)
 	{
-		return ClassParser.Parse(context.TargetNode as InterfaceDeclarationSyntax, context.TargetSymbol as INamedTypeSymbol, context.Attributes, context.SemanticModel.Compilation);
+		return ClassParser.Parse(context.TargetNode as ClassDeclarationSyntax, context.TargetSymbol as INamedTypeSymbol, context.Attributes, context.SemanticModel.Compilation);
 	}
 	
 	private static void Execute(ClassModel source, SourceProductionContext context)
@@ -68,6 +68,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			.Concat(source.Methods.Select(s => s.ReturnNamespace))
 			.Concat(
 			[
+				"System",
 				"System.Net.Http",
 				"System.Net.Http.Json",
 				"System.Threading",
@@ -83,9 +84,9 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 			namespace {{source.Namespace}};
 
-			public sealed class {{ConvertToTypeName(source.Name)}} : {{source.Name}} 
+			public partial class {{source.Name}}
 			{
-				private readonly HttpClient _client = new HttpClient() 
+				public HttpClient Client { get; } = new HttpClient() 
 				{ 
 					BaseAddress = new Uri("{{source.BaseAddress}}"),
 				};
@@ -110,19 +111,19 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 			builder.Indentation++;
 			
-			builder.WriteLine($"public async {returnType} {method.Name}({String.Join(", ", method.Parameters.Select(s => $"{s.Type} {s.Name}"))})");
+			builder.WriteLine($"public partial async {returnType} {method.Name}({String.Join(", ", method.Parameters.Select(s => $"{s.Type} {s.Name}"))})");
 			builder.WriteLine('{');
 			builder.Indentation++;
 
-			if (method.Parameters.All(a => a.Location is HttpLocation.Query or HttpLocation.Path))
+			if (method.Parameters.Where(w => w.Location.Location != HttpLocation.None).All(a => a.Location.Location is HttpLocation.Query or HttpLocation.Path))
 			{
 				if (method.ReturnType is nameof(HttpResponseMessage))
 				{
-					builder.WriteLine($"var response = await _client.{method.Method?.Method ?? "Get"}Async({ParsePath(method.Path, method.Parameters)}, {tokenText});");
+					builder.WriteLine($"var response = await Client.{method.Method?.Method ?? "Get"}Async({ParsePath(method.Path, method.Parameters)}, {tokenText});");
 				}
 				else
 				{
-					builder.WriteLine($"using var response = await _client.{method.Method?.Method ?? "Get"}Async({ParsePath(method.Path, method.Parameters)}, {tokenText});");
+					builder.WriteLine($"using var response = await Client.{method.Method?.Method ?? "Get"}Async({ParsePath(method.Path, method.Parameters)}, {tokenText});");
 				}
 			}
 			else
@@ -131,11 +132,11 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 				
 				if (method.ReturnType is nameof(HttpResponseMessage))
 				{
-					builder.WriteLine($"var response = await _client.SendAsync(request, {tokenText});");
+					builder.WriteLine($"var response = await Client.SendAsync(request, {tokenText});");
 				}
 				else
 				{
-					builder.WriteLine($"using var response = await _client.SendAsync(request, {tokenText});");
+					builder.WriteLine($"using var response = await Client.SendAsync(request, {tokenText});");
 				}
 			}
 
@@ -181,30 +182,22 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			builder.WriteLine('}');
 		}
 
-		builder.Indentation--;
+		builder.Indentation = Math.Max(builder.Indentation - 1, 0);
 
 		builder.WriteLine('}');
 		
-		context.AddSource($"{ConvertToTypeName(source.Name)}.g.cs", builder.ToSourceText());
-	}
-
-	private static string ConvertToTypeName(string name)
-	{
-		if (name.StartsWith("I", StringComparison.InvariantCultureIgnoreCase))
-		{
-			return $"{name.Substring(1)}Handler";
-		}
-
-		return $"{name}Handler";
+		context.AddSource($"{source.Name}.g.cs", builder.ToSourceText());
 	}
 
 	private static string ParsePath(string path, ImmutableEquatableArray<ParameterModel> parameters)
 	{
-		var hasHoles = parameters.Any(a => a.Location is HttpLocation.Path or HttpLocation.Query);
+		var hasHoles = parameters.Any(a => a.Location.Location is HttpLocation.Path or HttpLocation.Query);
 
 		path = AddQueryString(path, parameters
-			.Where(w => w.Location == HttpLocation.Query && !w.IsNullable)
-			.Select(s =>  new KeyValuePair<string, string>(s.Name, String.IsNullOrEmpty(s.Format) ? $"{{{s.Name}}}" : $"{{{s.Name}:{s.Format}}}")));
+			.Where(w => w.Location.Location == HttpLocation.Query && !w.IsNullable)
+			.Select(s => new KeyValuePair<string, string>(s.Location.Name ?? s.Name, String.IsNullOrEmpty(s.Location.Format) 
+				? $"{{{s.Name}}}" 
+				: $"{{{s.Name}:{s.Location.Format}}}")));
 	
 		// foreach (var parameter in parameters)
 		// {

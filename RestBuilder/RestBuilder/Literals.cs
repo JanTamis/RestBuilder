@@ -11,7 +11,7 @@ public static class Literals
 
 		namespace {{BaseNamespace}};
 
-		[AttributeUsage(AttributeTargets.Interface, Inherited = false, AllowMultiple = false)]
+		[AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
 		public sealed class {{BaseAddressAttribute}} : Attribute
 		{
 			/// <summary>

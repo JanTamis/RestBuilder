@@ -1,13 +1,12 @@
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace RestBuilder.Sample;
 
 [BaseAddress("https://api.example.com/")]
-public interface ITestClient
+public partial class TestClient
 {
 	[Get("User")]
 	[AllowAnyStatusCode]
-	Task<string> GetUserAsync([Query(Format = "N2")] int id, CancellationToken token);
+	public partial Task<string> GetUserAsync([Query] int id, CancellationToken token);
 }

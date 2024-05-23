@@ -14,7 +14,7 @@ namespace RestBuilder.Parsers;
 
 public static class ClassParser
 {
-	public static ClassModel Parse(InterfaceDeclarationSyntax interfaceDeclaration, INamedTypeSymbol interfaceSymbol, ImmutableArray<AttributeData> attributes, Compilation compilation)
+	public static ClassModel Parse(ClassDeclarationSyntax interfaceDeclaration, INamedTypeSymbol interfaceSymbol, ImmutableArray<AttributeData> attributes, Compilation compilation)
 	{
 		var namespaceName = interfaceSymbol.ContainingNamespace.ToDisplayString();
 		var className = interfaceDeclaration!.Identifier.Text;
@@ -29,6 +29,7 @@ public static class ClassParser
 			Methods = interfaceSymbol
 				.GetMembers()
 				.OfType<IMethodSymbol>()
+				.Where(w => w.IsPartialDefinition)
 				.Select(s => new MethodModel
 				{
 					Name = s.Name,
@@ -41,7 +42,7 @@ public static class ClassParser
 						.FirstOrDefault(),
 					Path = s.GetAttributes()
 						.Where(x => IsValidHttpMethod(x.AttributeClass.Name.Replace(nameof(Attribute), String.Empty)))
-						.Select(x => x.GetValue(String.Empty))
+						.Select(x => x.GetValue(0, String.Empty))
 						.FirstOrDefault(),
 					Parameters = s.Parameters
 						.Select(x => new ParameterModel
@@ -52,26 +53,28 @@ public static class ClassParser
 							Namespace = x.Type.ContainingNamespace?.ToString(),
 							Location = x.GetAttributes()
 								.Where(w => w.AttributeClass.ContainingNamespace.ToString() == Literals.BaseNamespace)
-								.Select(y =>
+								.Select(y => new LocationAttributeModel
 								{
-									return y.AttributeClass.Name switch
+									Location = y.AttributeClass.Name switch
 									{
 										nameof(Literals.QueryAttribute) => HttpLocation.Query,
-										_                               => HttpLocation.Query
-									};
+										_ => HttpLocation.Query
+									},
+									Format = y.GetValue("Format", String.Empty),
+									Name = y.GetValue<string?>(0, null) ?? y.GetValue<string?>("Name", null),
+									Value = y.GetValue<string?>(1, null) ?? y.GetValue<string?>("Value", null),
+									UrlEncode = y.GetValue("UrlEncode", true)
+								})
+								.DefaultIfEmpty(new LocationAttributeModel
+								{
+									Location = HttpLocation.None,
 								})
 								.FirstOrDefault(),
-							Format = x.GetAttributes()
-								.Where(w => w.AttributeClass.ContainingNamespace.ToString() == Literals.BaseNamespace)
-								.Select(y => y.GetValue("Format", String.Empty))
-								.Where(w => !String.IsNullOrEmpty(w))
-								.DefaultIfEmpty(String.Empty)
-								.FirstOrDefault(), 
 						})
 						.ToImmutableEquatableArray(),
 					AllowAnyStatusCode = s.GetAttributes()
 						.GetByName("AllowAnyStatusCode")
-						.Select(x => x.GetValue(true))
+						.Select(x => x.GetValue(0, true))
 						.FirstOrDefault()
 				})
 				.ToImmutableEquatableArray(),
@@ -142,17 +145,37 @@ public static class ClassParser
 		return attributes.Where(w => w.AttributeClass.Name.Replace(nameof(Attribute), String.Empty) == name);
 	}
 
-	private static T GetValue<T>(this AttributeData attributes, T defaultValue)
+	private static T GetValue<T>(this AttributeData attributes, int index, T defaultValue)
 	{
-		return attributes.ConstructorArguments.Length > 0 
-			? (T) attributes.ConstructorArguments[0].Value 
-			: defaultValue;
+		if (attributes.ConstructorArguments.Length <= index)
+		{
+			return defaultValue;
+		}
+
+		var result = attributes.ConstructorArguments[index].Value;
+
+		if (result?.GetType() == typeof(T))
+		{
+			return (T)result;
+		}
+
+		return defaultValue;
 	}
 
 	private static T GetValue<T>(this AttributeData attributes, string name, T defaultValue)
 	{
-		return attributes.NamedArguments.Length > 0
-			? (T) attributes.NamedArguments.FirstOrDefault(f => f.Key == name).Value.Value
-			: defaultValue;
+		if (attributes.NamedArguments.Length > 0)
+		{
+			return defaultValue;
+		}
+
+		var result = attributes.NamedArguments.FirstOrDefault(f => f.Key == name).Value.Value;
+
+		if (result?.GetType() == typeof(T))
+		{
+			return (T)result;
+		}
+
+		return defaultValue;
 	}
 }
