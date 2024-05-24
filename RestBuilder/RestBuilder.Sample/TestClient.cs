@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -8,5 +9,8 @@ public partial class TestClient
 {
 	[Get("User")]
 	[AllowAnyStatusCode]
-	public partial Task<string> GetUserAsync([Header("userId")] int id, CancellationToken token);
+	public partial Task<string> GetUserAsync(
+		[Header("userId", Format = "hello {0}")] int id,
+		[Header("name")] string name, 
+		CancellationToken token);
 }

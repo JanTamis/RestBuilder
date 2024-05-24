@@ -165,16 +165,16 @@ public static class ClassParser
 
 	private static T GetValue<T>(this AttributeData attributes, string name, T defaultValue)
 	{
-		if (attributes.NamedArguments.Length > 0)
+		if (attributes.NamedArguments.Length == 0)
 		{
 			return defaultValue;
 		}
 
 		var result = attributes.NamedArguments.FirstOrDefault(f => f.Key == name).Value.Value;
 
-		if (result?.GetType() == typeof(T))
+		if (result != null && result?.GetType() == typeof(T))
 		{
-			return (T) result;
+			return (T)result;
 		}
 
 		return defaultValue;

@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Web;
 using Microsoft.CodeAnalysis;
@@ -20,6 +21,8 @@ namespace RestBuilder;
 [Generator]
 public class RestSourceSourceGenerator : IIncrementalGenerator
 {
+	private static readonly Regex _holeRegex = new Regex(@"\{\d+(:[^}]*)?\}");
+
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
 		// Add the marker attribute to the compilation.
@@ -147,15 +150,41 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 					
 					foreach (var header in headers[false])
 					{
-						builder.WriteLine($"request.Headers.Add(\"{header.Location.Name}\", {header.Name}.ToString());");
+						var format = !String.IsNullOrEmpty(header.Location.Format)
+							? $"\"{header.Location.Format}\""
+							: String.Empty;
+
+						var result = $"{header.Name}.ToString({format})";
+
+						if (HasHoles(header.Location.Format))
+						{
+							result = $"$\"{FillHoles(header.Location.Format, header.Name)}\"";
+						}
+
+						builder.WriteLine($"request.Headers.Add(\"{header.Location.Name}\", {result});");
 					}
 					
 					foreach (var header in headers[true])
 					{
+						var format = !String.IsNullOrEmpty(header.Location.Format)
+							? $"\"{header.Location.Format}\""
+							: String.Empty;
+
+						var suffix = header.Namespace == "System" && header.Type is "String" or "string"
+							? String.Empty
+							: $".ToString({format})";
+
+						var result = $"{header.Name}{suffix}";
+
+						if (HasHoles(header.Location.Format))
+						{
+							result = $"$\"{FillHoles(header.Location.Format, header.Name)}\"";
+						}
+
 						builder.WriteLine();
 						builder.WriteLine($"if ({header.Name} != null)");
 						builder.WriteLine('{');
-						builder.WriteLine($"\trequest.Headers.Add(\"{header.Location.Name}\", {header.Name}.ToString());");
+						builder.WriteLine($"\trequest.Headers.Add(\"{header.Location.Name}\", {result});");
 						builder.WriteLine('}');
 					}
 
@@ -197,7 +226,6 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 					builder.WriteLine();
 					builder.WriteLine($"return await response.Content.ReadAsByteArrayAsync({tokenText});");
 					break;
-
 				default:
 				{
 					if (!String.IsNullOrEmpty(method.ReturnType))
@@ -281,5 +309,32 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 		sb.Append(anchorText.ToString());
 		return sb.ToString();
+	}
+
+	private static bool HasHoles(string value)
+	{
+		return _holeRegex.IsMatch(value);
+	}
+
+	private static string FillHoles(string value, params string[] fieldName)
+	{
+		return _holeRegex.Replace(value, m =>
+		{
+			var result = m.Value;
+
+			for (int i = 0; i < fieldName.Length; i++)
+			{
+				result = m.Value.Replace(i.ToString(), fieldName[i]);
+			}
+
+			if (result == m.Value)
+			{
+				result = result
+				.Replace("{", "{{")
+				.Replace("}", "}}");
+			}
+
+			return result;
+		});
 	}
 }

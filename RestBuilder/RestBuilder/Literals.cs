@@ -9,6 +9,8 @@ public static class Literals
 	public const string AttributeSourceCode = $$"""
 		using System;
 
+		#nullable enable
+
 		namespace {{BaseNamespace}};
 
 		[AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
@@ -338,6 +340,8 @@ public static class Literals
 	
 	public const string QuerySerializationMethod = $$"""
 		namespace {{BaseNamespace}};
+
+		#nullable enable
 		
 		/// <summary>
 		/// Type of serialization that should be applied to the query parameter's value
@@ -365,6 +369,8 @@ public static class Literals
 		using System;
 		
 		namespace {{BaseNamespace}};
+
+		#nullable enable
 
 		/// <summary>
 		/// Controls whether the given method, or all methods within the given interface, will throw an exception if the response status code does not indicate success
@@ -398,8 +404,11 @@ public static class Literals
 	
 	public const string HeaderAttribute = $$"""
 		using System;
+		using System.Diagnostics.CodeAnalysis;
 		
 		namespace {{BaseNamespace}};
+
+		#nullable enable
 
 		/// <summary>
 		/// Attribute allowing interface-level, method-level, or parameter-level headers to be defined. See the docs for details
@@ -428,6 +437,7 @@ public static class Literals
 			/// <see cref="IFormattable.ToString(string, IFormatProvider)"/> method. Otherwise this is ignored.
 			/// Example values: "X2", "{0:X2}", "test{0}".
 			/// </remarks>
+			[StringSyntax(StringSyntaxAttribute.CompositeFormat)]
 			public string? Format { get; set; }
 	
 			/// <summary>
