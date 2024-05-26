@@ -11,4 +11,5 @@ public record ClassModel
 	public bool IsStatic { get; set; }
 	
 	public ImmutableEquatableArray<MethodModel> Methods { get; set; }
+	public ImmutableEquatableArray<PropertyModel> Properties { get; set; }
 }

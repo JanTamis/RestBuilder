@@ -14,19 +14,19 @@ namespace RestBuilder.Parsers;
 
 public static class ClassParser
 {
-	public static ClassModel Parse(ClassDeclarationSyntax interfaceDeclaration, INamedTypeSymbol interfaceSymbol, ImmutableArray<AttributeData> attributes, Compilation compilation)
+	public static ClassModel Parse(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol classSymbol, ImmutableArray<AttributeData> attributes, Compilation compilation)
 	{
-		var namespaceName = interfaceSymbol.ContainingNamespace.ToDisplayString();
-		var className = interfaceDeclaration!.Identifier.Text;
+		var namespaceName = classSymbol.ContainingNamespace.ToDisplayString();
+		var className = classDeclaration!.Identifier.Text;
 		var baseAddress = attributes.First(f => f.AttributeClass.Name == "BaseAddressAttribute").ConstructorArguments[0].Value as string;
 
 		var source = new ClassModel
 		{
 			Name = className,
 			Namespace = namespaceName,
-			IsStatic = interfaceDeclaration.Modifiers.Any(SyntaxKind.StaticKeyword),
+			IsStatic = classDeclaration.Modifiers.Any(SyntaxKind.StaticKeyword),
 			BaseAddress = baseAddress,
-			Methods = interfaceSymbol
+			Methods = classSymbol
 				.GetMembers()
 				.OfType<IMethodSymbol>()
 				.Where(w => w.IsPartialDefinition)
@@ -51,26 +51,7 @@ public static class ClassParser
 							Type = ToName(x.Type),
 							IsNullable = x.Type.IsReferenceType,
 							Namespace = x.Type.ContainingNamespace?.ToString(),
-							Location = x.GetAttributes()
-								.Where(w => w.AttributeClass.ContainingNamespace.ToString() == Literals.BaseNamespace)
-								.Select(y => new LocationAttributeModel
-								{
-									Location = y.AttributeClass.Name switch
-									{
-										nameof(Literals.QueryAttribute)  => HttpLocation.Query,
-										nameof(Literals.HeaderAttribute) => HttpLocation.Header,
-										_                                => HttpLocation.Query
-									},
-									Format = y.GetValue("Format", String.Empty),
-									Name = y.GetValue<string?>(0, null) ?? y.GetValue<string?>("Name", null),
-									Value = y.GetValue<string?>(1, null) ?? y.GetValue<string?>("Value", null),
-									UrlEncode = y.GetValue("UrlEncode", true)
-								})
-								.DefaultIfEmpty(new LocationAttributeModel
-								{
-									Location = HttpLocation.None,
-								})
-								.FirstOrDefault(),
+							Location = GetLocationAttribute(x.GetAttributes(), HttpLocation.Query),
 						})
 						.ToImmutableEquatableArray(),
 					AllowAnyStatusCode = s.GetAttributes()
@@ -78,6 +59,19 @@ public static class ClassParser
 						.Select(x => x.GetValue(0, true))
 						.FirstOrDefault()
 				})
+				.ToImmutableEquatableArray(),
+			Properties = classSymbol
+				.GetMembers()
+				.OfType<IPropertySymbol>()
+				.Select(s => new PropertyModel
+				{
+					IsNullable = s.Type.IsReferenceType,
+					Name = s.Name,
+					Namespace = s.Type.ContainingNamespace?.ToString(),
+					Type = ToName(s.Type),
+					Location = GetLocationAttribute(s.GetAttributes(), HttpLocation.None),
+				})
+				.Where(w => w.Location.Location != HttpLocation.None)
 				.ToImmutableEquatableArray(),
 		};
 
@@ -178,5 +172,29 @@ public static class ClassParser
 		}
 
 		return defaultValue;
+	}
+
+	private static LocationAttributeModel GetLocationAttribute(ImmutableArray<AttributeData> attributes, HttpLocation defaultLocation)
+	{
+		return attributes
+			.Where(w => w.AttributeClass.ContainingNamespace.ToString() == Literals.BaseNamespace)
+			.Select(y => new LocationAttributeModel
+			{
+				Location = y.AttributeClass.Name switch
+				{
+					nameof(Literals.QueryAttribute)  => HttpLocation.Query,
+					nameof(Literals.HeaderAttribute) => HttpLocation.Header,
+					_                                => defaultLocation
+				},
+				Format = y.GetValue("Format", String.Empty),
+				Name = y.GetValue<string?>(0, null) ?? y.GetValue<string?>("Name", null),
+				Value = y.GetValue<string?>(1, null) ?? y.GetValue<string?>("Value", null),
+				UrlEncode = y.GetValue("UrlEncode", true)
+			})
+			.DefaultIfEmpty(new LocationAttributeModel
+			{
+				Location = HttpLocation.None,
+			})
+			.FirstOrDefault();
 	}
 }

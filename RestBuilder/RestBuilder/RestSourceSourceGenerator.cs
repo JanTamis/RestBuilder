@@ -12,6 +12,8 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using RestBuilder.Enumerators;
+using RestBuilder.Helpers;
+using RestBuilder.Interfaces;
 using RestBuilder.Models;
 using RestBuilder.Parsers;
 using TypeShape.Roslyn;
@@ -104,6 +106,8 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			var returnType = "Task";
 
 			var tokenText = method.Parameters
+				.Concat<IType>(source.Properties.Where(w => w.Location.Location == HttpLocation.Header))
+				.DistinctBy(d => d.Location.Name ?? d.Name)
 				.Where(w => w.Namespace == "System.Threading" && w.Type is nameof(CancellationToken))
 				.Select(s => s.Name)
 				.DefaultIfEmpty("CancellationToken.None")
@@ -122,24 +126,30 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			builder.WriteLine('{');
 			builder.Indentation++;
 
+			var items = method.Parameters
+				.Concat<IType>(source.Properties)
+				.DistinctBy(d => d.Location.Name ?? d.Name);
+
 			if (method.Parameters.Where(w => w.Location.Location != HttpLocation.None).All(a => a.Location.Location is HttpLocation.Query or HttpLocation.Path))
 			{
 				if (method.ReturnType is nameof(HttpResponseMessage))
 				{
-					builder.WriteLine($"var response = await Client.{method.Method?.Method ?? "Get"}Async({ParsePath(method.Path, method.Parameters)}, {tokenText});");
+					builder.WriteLine($"var response = await Client.{method.Method?.Method ?? "Get"}Async({ParsePath(method.Path, items)}, {tokenText});");
 				}
 				else
 				{
-					builder.WriteLine($"using var response = await Client.{method.Method?.Method ?? "Get"}Async({ParsePath(method.Path, method.Parameters)}, {tokenText});");
+					builder.WriteLine($"using var response = await Client.{method.Method?.Method ?? "Get"}Async({ParsePath(method.Path, items)}, {tokenText});");
 				}
 			}
 			else
 			{
-				builder.WriteLine($"using var request = new HttpRequestMessage(HttpMethod.{method.Method?.Method ?? "Get"}, {ParsePath(method.Path, method.Parameters)});");
+				builder.WriteLine($"using var request = new HttpRequestMessage(HttpMethod.{method.Method?.Method ?? "Get"}, {ParsePath(method.Path, items)});");
 
 				var headers = method.Parameters
 					.Where(w => w.Location.Location == HttpLocation.Header)
-					.ToLookup(g => g.IsNullable);
+					.Concat<IType>(source.Properties.Where(w => w.Location.Location == HttpLocation.Header))
+					.DistinctBy(d => d.Location.Name ?? d.Name)
+					.ToLookup(g => g.IsNullable && String.IsNullOrEmpty(g.Location.Format));
 
 				if (headers.Any())
 				{
@@ -170,7 +180,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 							? $"\"{header.Location.Format}\""
 							: String.Empty;
 
-						var suffix = header.Namespace == "System" && header.Type is "String" or "string"
+						var suffix = header is { Namespace: "System", Type: "String" or "string" }
 							? String.Empty
 							: $".ToString({format})";
 
@@ -249,8 +259,9 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		context.AddSource($"{source.Name}.g.cs", builder.ToSourceText());
 	}
 
-	private static string ParsePath(string path, ImmutableEquatableArray<ParameterModel> parameters)
+	private static string ParsePath(string path, IEnumerable<IType> parameters)
 	{
+		// TODO only allow holes in path and if path has a hole replace if with a literal
 		var hasHoles = parameters.Any(a => a.Location.Location is HttpLocation.Path or HttpLocation.Query);
 
 		path = AddQueryString(path, parameters
@@ -322,7 +333,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		{
 			var result = m.Value;
 
-			for (int i = 0; i < fieldName.Length; i++)
+			for (var i = 0; i < fieldName.Length; i++)
 			{
 				result = m.Value.Replace(i.ToString(), fieldName[i]);
 			}
