@@ -127,8 +127,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			builder.Indentation++;
 
 			var items = method.Parameters
-				.Concat<IType>(source.Properties)
-				.DistinctBy(d => d.Location.Name ?? d.Name);
+				.Concat<IType>(source.Properties);
 
 			if (method.Parameters.Where(w => w.Location.Location != HttpLocation.None).All(a => a.Location.Location is HttpLocation.Query or HttpLocation.Path))
 			{
