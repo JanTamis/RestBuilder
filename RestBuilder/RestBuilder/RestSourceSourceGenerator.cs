@@ -303,17 +303,6 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 				.Replace("}", "}}"));
 
 			path = resultPath.ToString();
-
-
-			// path = Regex.Replace(path, @"\{[^\{-\}]*\}", m =>
-			// {
-			// 	if (pathHoles.TryGetValue(m.Value.Substring(1, m.Value.Length - 2), out var parameter))
-			// 	{
-			// 		return $"{{{parameter.Name}}}";
-			// 	}
-			//
-			// 	return Uri.EscapeDataString(m.Value);
-			// });
 		}
 
 		path = AddQueryString(path, parameters
