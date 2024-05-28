@@ -6,10 +6,10 @@ namespace RestBuilder.Sample;
 [BaseAddress("https://api.example.com/")]
 public partial class TestClient
 {
-	[Get("User")]
+	[Get("{username}/User}")]
 	[AllowAnyStatusCode]
 	public partial Task<string> GetUserAsync(
 		[Header("userId")] int id,
-		[Header("name")] string name, 
+		[Path("username")] string name, 
 		CancellationToken token);
 }

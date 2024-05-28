@@ -6,7 +6,6 @@ using System.Net.Http;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
-using System.Web;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -51,6 +50,10 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
 			"HeaderAttribute.g.cs",
 			SourceText.From(Literals.HeaderAttribute, Encoding.UTF8)));
+
+		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
+			"PathAttribute.g.cs",
+			SourceText.From(Literals.PathAttribute, Encoding.UTF8)));
 
 		var classes = context.SyntaxProvider
 			.ForAttributeWithMetadataName(
@@ -260,8 +263,58 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 	private static string ParsePath(string path, IEnumerable<IType> parameters)
 	{
-		// TODO only allow holes in path and if path has a hole replace if with a literal
 		var hasHoles = parameters.Any(a => a.Location.Location is HttpLocation.Path or HttpLocation.Query);
+
+		if (hasHoles)
+		{
+			var pathHoles = parameters
+				.Where(w => w.Location.Location == HttpLocation.Path)
+				.ToDictionary(t => t.Location.Name ?? t.Name, t => t);
+
+			var index = 0;
+			var resultPath = new StringBuilder();
+
+			var matches = Regex.Matches(path, @"\{[^\{-\}]*\}");
+
+			foreach (Match match in matches)
+			{
+				resultPath.Append(path
+					.Substring(index, match.Index - index)
+					.Replace("{", "{{")
+					.Replace("}", "}}"));
+				
+				if (pathHoles.TryGetValue(match.Value.Substring(1, match.Value.Length - 2), out var parameter))
+				{
+					resultPath.Append($"{{{parameter.Name}}}");
+				}
+				else
+				{
+					resultPath.Append(match.Value
+						.Replace("{", "{{")
+						.Replace("}", "}}"));
+				}
+
+				index = match.Index + match.Length;
+			}
+
+			resultPath.Append(path
+				.Substring(index)
+				.Replace("{", "{{")
+				.Replace("}", "}}"));
+
+			path = resultPath.ToString();
+
+
+			// path = Regex.Replace(path, @"\{[^\{-\}]*\}", m =>
+			// {
+			// 	if (pathHoles.TryGetValue(m.Value.Substring(1, m.Value.Length - 2), out var parameter))
+			// 	{
+			// 		return $"{{{parameter.Name}}}";
+			// 	}
+			//
+			// 	return Uri.EscapeDataString(m.Value);
+			// });
+		}
 
 		path = AddQueryString(path, parameters
 			.Where(w => w.Location.Location == HttpLocation.Query && !w.IsNullable)

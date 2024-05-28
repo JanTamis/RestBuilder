@@ -184,6 +184,7 @@ public static class ClassParser
 				{
 					nameof(Literals.QueryAttribute)  => HttpLocation.Query,
 					nameof(Literals.HeaderAttribute) => HttpLocation.Header,
+					nameof(Literals.PathAttribute)   => HttpLocation.Path,
 					_                                => defaultLocation
 				},
 				Format = y.GetValue("Format", String.Empty),
