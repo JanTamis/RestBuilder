@@ -12,4 +12,6 @@ public record ClassModel
 	
 	public ImmutableEquatableArray<MethodModel> Methods { get; set; }
 	public ImmutableEquatableArray<PropertyModel> Properties { get; set; }
+	
+	public ImmutableEquatableArray<LocationAttributeModel> Attributes { get; set; }
 }

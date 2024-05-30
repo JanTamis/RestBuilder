@@ -26,6 +26,8 @@ public static class ClassParser
 			Namespace = namespaceName,
 			IsStatic = classDeclaration.Modifiers.Any(SyntaxKind.StaticKeyword),
 			BaseAddress = baseAddress,
+			Attributes = GetLocationAttributes(classSymbol.GetAttributes(), HttpLocation.None)
+				.ToImmutableEquatableArray(),
 			Methods = classSymbol
 				.GetMembers()
 				.OfType<IMethodSymbol>()
@@ -176,6 +178,16 @@ public static class ClassParser
 
 	private static LocationAttributeModel GetLocationAttribute(ImmutableArray<AttributeData> attributes, HttpLocation defaultLocation)
 	{
+		return GetLocationAttributes(attributes, defaultLocation)
+			.DefaultIfEmpty(new LocationAttributeModel
+			{
+				Location = HttpLocation.None,
+			})
+			.First();
+	}
+
+	private static IEnumerable<LocationAttributeModel> GetLocationAttributes(ImmutableArray<AttributeData> attributes, HttpLocation defaultLocation)
+	{
 		return attributes
 			.Where(w => w.AttributeClass.ContainingNamespace.ToString() == Literals.BaseNamespace)
 			.Select(y => new LocationAttributeModel
@@ -191,11 +203,6 @@ public static class ClassParser
 				Name = y.GetValue<string?>(0, null) ?? y.GetValue<string?>("Name", null),
 				Value = y.GetValue<string?>(1, null) ?? y.GetValue<string?>("Value", null),
 				UrlEncode = y.GetValue("UrlEncode", true)
-			})
-			.DefaultIfEmpty(new LocationAttributeModel
-			{
-				Location = HttpLocation.None,
-			})
-			.FirstOrDefault();
+			});
 	}
 }

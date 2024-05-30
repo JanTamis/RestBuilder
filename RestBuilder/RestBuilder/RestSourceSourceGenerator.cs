@@ -91,19 +91,41 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			.OrderBy(o => o)
 			.Select(s => $"using {s};");
 
+		foreach (var @namespace in namespaces)
+		{
+			builder.WriteLine(@namespace);
+		}
+
 		builder.WriteLine($$"""
-			{{String.Join("\n", namespaces)}}
-
+			
 			namespace {{source.Namespace}};
-
+			
 			public partial class {{source.Name}}
 			{
 				public HttpClient Client { get; } = new HttpClient() 
 				{ 
 					BaseAddress = new Uri("{{source.BaseAddress}}"),
-				};
 			""");
 
+		if (source.Attributes.Any(a => a.Location == HttpLocation.Header))
+		{
+			builder.Indentation = 2;
+			
+			builder.WriteLine("DefaultRequestHeaders = ");
+			builder.WriteLine('{');
+
+			foreach (var header in source.Attributes.Where(w => w.Location == HttpLocation.Header))
+			{
+				builder.WriteLine($"\t{{ \"{header.Name}\", \"{header.Value}\" }},");
+			}
+			
+			builder.WriteLine('}');
+
+			builder.Indentation = 0;
+		}
+		
+		builder.WriteLine("\t};");
+		
 		foreach (var method in source.Methods)
 		{
 			var returnType = "Task";
