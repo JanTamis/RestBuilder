@@ -154,13 +154,12 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			var items = method.Parameters
 				.Concat<IType>(source.Properties);
 
-			var headers = method.Parameters
+			var headers = items
 				.Where(w => w.Location.Location == HttpLocation.Header)
-				.Concat<IType>(source.Properties.Where(w => w.Location.Location == HttpLocation.Header))
 				.DistinctBy(d => d.Location.Name ?? d.Name)
 				.ToLookup(g => g.IsNullable && String.IsNullOrEmpty(g.Location.Format));
 
-			if (!headers.Any())
+			if (!headers.Any() && !items.Any(a => a.Location.Location == HttpLocation.Query && a.IsNullable))
 			{
 				if (method.ReturnType is nameof(HttpResponseMessage))
 				{
@@ -231,9 +230,6 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 					builder.WriteLine($"using var response = await Client.SendAsync(request, {tokenText});");
 				}
 			}
-
-			
-
 
 			if (!method.AllowAnyStatusCode)
 			{
