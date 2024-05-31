@@ -97,9 +97,9 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		}
 
 		builder.WriteLine($$"""
-			
+
 			namespace {{source.Namespace}};
-			
+
 			public partial class {{source.Name}}
 			{
 				public HttpClient Client { get; } = new HttpClient() 
@@ -110,7 +110,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		if (source.Attributes.Any(a => a.Location == HttpLocation.Header))
 		{
 			builder.Indentation = 2;
-			
+
 			builder.WriteLine("DefaultRequestHeaders = ");
 			builder.WriteLine('{');
 
@@ -118,14 +118,14 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			{
 				builder.WriteLine($"\t{{ \"{header.Name}\", \"{header.Value}\" }},");
 			}
-			
+
 			builder.WriteLine('}');
 
 			builder.Indentation = 0;
 		}
-		
+
 		builder.WriteLine("\t};");
-		
+
 		foreach (var method in source.Methods)
 		{
 			var returnType = "Task";
@@ -154,7 +154,13 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			var items = method.Parameters
 				.Concat<IType>(source.Properties);
 
-			if (method.Parameters.Where(w => w.Location.Location != HttpLocation.None).All(a => a.Location.Location is HttpLocation.Query or HttpLocation.Path))
+			var headers = method.Parameters
+				.Where(w => w.Location.Location == HttpLocation.Header)
+				.Concat<IType>(source.Properties.Where(w => w.Location.Location == HttpLocation.Header))
+				.DistinctBy(d => d.Location.Name ?? d.Name)
+				.ToLookup(g => g.IsNullable && String.IsNullOrEmpty(g.Location.Format));
+
+			if (!headers.Any())
 			{
 				if (method.ReturnType is nameof(HttpResponseMessage))
 				{
@@ -169,61 +175,52 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			{
 				builder.WriteLine($"using var request = new HttpRequestMessage(HttpMethod.{method.Method?.Method ?? "Get"}, {ParsePath(method.Path, items)});");
 
-				var headers = method.Parameters
-					.Where(w => w.Location.Location == HttpLocation.Header)
-					.Concat<IType>(source.Properties.Where(w => w.Location.Location == HttpLocation.Header))
-					.DistinctBy(d => d.Location.Name ?? d.Name)
-					.ToLookup(g => g.IsNullable && String.IsNullOrEmpty(g.Location.Format));
-
-				if (headers.Any())
+				if (headers[false].Any())
 				{
-					if (headers[false].Any())
+					builder.WriteLine();
+				}
+
+				foreach (var header in headers[false])
+				{
+					var format = !String.IsNullOrEmpty(header.Location.Format)
+						? $"\"{header.Location.Format}\""
+						: String.Empty;
+
+					var result = $"{header.Name}.ToString({format})";
+
+					if (HasHoles(header.Location.Format))
 					{
-						builder.WriteLine();
+						result = $"$\"{FillHoles(header.Location.Format, header.Name)}\"";
 					}
-					
-					foreach (var header in headers[false])
+
+					builder.WriteLine($"request.Headers.Add(\"{header.Location.Name}\", {result});");
+				}
+
+				foreach (var header in headers[true])
+				{
+					var format = !String.IsNullOrEmpty(header.Location.Format)
+						? $"\"{header.Location.Format}\""
+						: String.Empty;
+
+					var suffix = header is { Namespace: "System", Type: "String" or "string" }
+						? String.Empty
+						: $".ToString({format})";
+
+					var result = $"{header.Name}{suffix}";
+
+					if (HasHoles(header.Location.Format))
 					{
-						var format = !String.IsNullOrEmpty(header.Location.Format)
-							? $"\"{header.Location.Format}\""
-							: String.Empty;
-
-						var result = $"{header.Name}.ToString({format})";
-
-						if (HasHoles(header.Location.Format))
-						{
-							result = $"$\"{FillHoles(header.Location.Format, header.Name)}\"";
-						}
-
-						builder.WriteLine($"request.Headers.Add(\"{header.Location.Name}\", {result});");
-					}
-					
-					foreach (var header in headers[true])
-					{
-						var format = !String.IsNullOrEmpty(header.Location.Format)
-							? $"\"{header.Location.Format}\""
-							: String.Empty;
-
-						var suffix = header is { Namespace: "System", Type: "String" or "string" }
-							? String.Empty
-							: $".ToString({format})";
-
-						var result = $"{header.Name}{suffix}";
-
-						if (HasHoles(header.Location.Format))
-						{
-							result = $"$\"{FillHoles(header.Location.Format, header.Name)}\"";
-						}
-
-						builder.WriteLine();
-						builder.WriteLine($"if ({header.Name} != null)");
-						builder.WriteLine('{');
-						builder.WriteLine($"\trequest.Headers.Add(\"{header.Location.Name}\", {result});");
-						builder.WriteLine('}');
+						result = $"$\"{FillHoles(header.Location.Format, header.Name)}\"";
 					}
 
 					builder.WriteLine();
+					builder.WriteLine($"if ({header.Name} != null)");
+					builder.WriteLine('{');
+					builder.WriteLine($"\trequest.Headers.Add(\"{header.Location.Name}\", {result});");
+					builder.WriteLine('}');
 				}
+
+				builder.WriteLine();
 
 				if (method.ReturnType is nameof(HttpResponseMessage))
 				{
@@ -234,6 +231,8 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 					builder.WriteLine($"using var response = await Client.SendAsync(request, {tokenText});");
 				}
 			}
+
+			
 
 
 			if (!method.AllowAnyStatusCode)
@@ -260,6 +259,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 					builder.WriteLine();
 					builder.WriteLine($"return await response.Content.ReadAsByteArrayAsync({tokenText});");
 					break;
+
 				default:
 				{
 					if (!String.IsNullOrEmpty(method.ReturnType))
@@ -304,7 +304,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 					.Substring(index, match.Index - index)
 					.Replace("{", "{{")
 					.Replace("}", "}}"));
-				
+
 				if (pathHoles.TryGetValue(match.Value.Substring(1, match.Value.Length - 2), out var parameter))
 				{
 					resultPath.Append($"{{{parameter.Name}}}");
@@ -404,8 +404,8 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			if (result == m.Value)
 			{
 				result = result
-				.Replace("{", "{{")
-				.Replace("}", "}}");
+					.Replace("{", "{{")
+					.Replace("}", "}}");
 			}
 
 			return result;
