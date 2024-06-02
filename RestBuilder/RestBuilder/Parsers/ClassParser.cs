@@ -166,11 +166,14 @@ public static class ClassParser
 			return defaultValue;
 		}
 
-		var result = attributes.NamedArguments.FirstOrDefault(f => f.Key == name).Value.Value;
-
-		if (result != null && result?.GetType() == typeof(T))
+		foreach (var item in attributes.NamedArguments)
 		{
-			return (T)result;
+			var result = item.Value.Value;
+			
+			if (item.Key == name && result != null && result.GetType() == typeof(T))
+			{
+				return (T)result;
+			}
 		}
 
 		return defaultValue;

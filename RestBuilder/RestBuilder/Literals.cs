@@ -285,6 +285,11 @@ public static class Literals
 			/// Gets the serialization method to use to serialize the value. Defaults to QuerySerializationMethod.ToString
 			/// </summary>
 			public QuerySerializationMethod SerializationMethod { get; set; }
+			
+			/// <summary>
+			/// Gets or sets a value indicating whether this path parameter should be URL-encoded. Defaults to true.
+			/// </summary>
+			public bool UrlEncode { get; set; } = true;
 	
 			/// <summary>
 			/// Gets or sets the format string used to format the value
@@ -558,6 +563,62 @@ public static class Literals
 			/// Serialized using the configured RequestPathParamSerializer
 			/// </summary>
 			Serialized,
+		
+			/// <summary>
+			/// Use the default serialization method. You probably don't want to specify this yourself
+			/// </summary>
+			Default,
+		}
+		""";
+	
+	public const string BodyAttribute = $$"""
+		using System;
+		
+		namespace {{BaseNamespace}};
+
+		/// <summary>
+		/// Attribute specifying that this parameter should be interpreted as the request body
+		/// </summary>
+		[AttributeUsage(AttributeTargets.Parameter, Inherited = false, AllowMultiple = false)]
+		public sealed class BodyAttribute : Attribute
+		{
+			/// <summary>
+			/// Gets the serialization method to use. Defaults to BodySerializationMethod.Serialized
+			/// </summary>
+			public BodySerializationMethod SerializationMethod { get; }
+	
+			/// <summary>
+			/// Initialises a new instance of the <see cref="BodyAttribute"/> class
+			/// </summary>
+			public BodyAttribute()
+				: this(BodySerializationMethod.Default)
+			{
+			}
+	
+			/// <summary>
+			/// Initialises a new instance of the <see cref="BodyAttribute"/> class, using the given body serialization method
+			/// </summary>
+			/// <param name="serializationMethod">Serialization method to use when serializing the body object</param>
+			public BodyAttribute(BodySerializationMethod serializationMethod)
+			{
+				this.SerializationMethod = serializationMethod;
+			}
+		}
+		
+		/// <summary>
+		/// Type of serialization that should be applied to the body
+		/// </summary>
+		public enum BodySerializationMethod
+		{
+			/// <summary>
+			/// Serialized using the configured IRequestBodySerializer (uses Json.NET by default)
+			/// </summary>
+			Serialized,
+		
+			/// <summary>
+			/// Serialized using Form URL Encoding. The body must implement IDictionary
+			/// </summary>
+			UrlEncoded,
 		
 			/// <summary>
 			/// Use the default serialization method. You probably don't want to specify this yourself

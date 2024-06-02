@@ -1,4 +1,5 @@
-using System.IO;
+using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -12,6 +13,6 @@ public partial class TestClient
 	[AllowAnyStatusCode]
 	public partial Task<string> GetUserAsync(
 		[Path("username")] string name,
-		[Header("password")] string password,
+		[Query("password", UrlEncode = false)] string password,
 		CancellationToken token);
 }

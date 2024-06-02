@@ -55,6 +55,10 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			"PathAttribute.g.cs",
 			SourceText.From(Literals.PathAttribute, Encoding.UTF8)));
 
+		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
+			"BodyAttribute.g.cs",
+			SourceText.From(Literals.BodyAttribute, Encoding.UTF8)));
+
 		var classes = context.SyntaxProvider
 			.ForAttributeWithMetadataName(
 				$"{Literals.BaseNamespace}.{Literals.BaseAddressAttribute}",
@@ -74,6 +78,16 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 	{
 		var builder = new SourceWriter('\t', 1);
 
+		WriteNamespaces(source, builder);
+		WriteClassStart(source, builder);
+		WriteMethods(source, builder);
+		WriteClassEnd(builder);
+
+		context.AddSource($"{source.Name}.g.cs", builder.ToSourceText());
+	}
+
+	private static void WriteNamespaces(ClassModel source, SourceWriter builder)
+	{
 		var namespaces = source.Methods
 			.SelectMany(s => s.Parameters)
 			.Select(s => s.Namespace)
@@ -85,6 +99,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 				"System.Net.Http.Json",
 				"System.Threading",
 				"System.Threading.Tasks",
+				"System.Runtime.CompilerServices"
 			])
 			.Where(w => !String.IsNullOrEmpty(w))
 			.Distinct()
@@ -95,11 +110,14 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		{
 			builder.WriteLine(@namespace);
 		}
+	}
 
+	private static void WriteClassStart(ClassModel source, SourceWriter builder)
+	{
 		builder.WriteLine($$"""
-
+			
 			namespace {{source.Namespace}};
-
+			
 			public partial class {{source.Name}}
 			{
 				public HttpClient Client { get; } = new HttpClient() 
@@ -109,177 +127,390 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 		if (source.Attributes.Any(a => a.Location == HttpLocation.Header))
 		{
-			builder.Indentation = 2;
-
-			builder.WriteLine("DefaultRequestHeaders = ");
-			builder.WriteLine('{');
-
-			foreach (var header in source.Attributes.Where(w => w.Location == HttpLocation.Header))
-			{
-				builder.WriteLine($"\t{{ \"{header.Name}\", \"{header.Value}\" }},");
-			}
-
-			builder.WriteLine('}');
-
-			builder.Indentation = 0;
+			WriteDefaultRequestHeaders(source, builder);
 		}
 
 		builder.WriteLine("\t};");
+	}
 
-		foreach (var method in source.Methods)
+	private static void WriteDefaultRequestHeaders(ClassModel source, SourceWriter builder)
+	{
+		builder.Indentation = 2;
+
+		builder.WriteLine("DefaultRequestHeaders = ");
+		builder.WriteLine('{');
+
+		foreach (var header in source.Attributes.Where(w => w.Location == HttpLocation.Header))
 		{
-			var returnType = "Task";
-
-			var tokenText = method.Parameters
-				.Concat<IType>(source.Properties.Where(w => w.Location.Location == HttpLocation.Header))
-				.DistinctBy(d => d.Location.Name ?? d.Name)
-				.Where(w => w.Namespace == "System.Threading" && w.Type is nameof(CancellationToken))
-				.Select(s => s.Name)
-				.DefaultIfEmpty("CancellationToken.None")
-				.First();
-
-			if (!String.IsNullOrEmpty(method.ReturnType))
-			{
-				returnType = $"Task<{method.ReturnType}>";
-			}
-
-			builder.WriteLine();
-
-			builder.Indentation++;
-
-			builder.WriteLine($"public partial async {returnType} {method.Name}({String.Join(", ", method.Parameters.Select(s => $"{s.Type} {s.Name}"))})");
-			builder.WriteLine('{');
-			builder.Indentation++;
-
-			var items = method.Parameters
-				.Concat<IType>(source.Properties);
-
-			var headers = items
-				.Where(w => w.Location.Location == HttpLocation.Header)
-				.DistinctBy(d => d.Location.Name ?? d.Name)
-				.ToLookup(g => g.IsNullable && String.IsNullOrEmpty(g.Location.Format));
-
-			if (!headers.Any() && !items.Any(a => a.Location.Location == HttpLocation.Query && a.IsNullable))
-			{
-				if (method.ReturnType is nameof(HttpResponseMessage))
-				{
-					builder.WriteLine($"var response = await Client.{method.Method?.Method ?? "Get"}Async({ParsePath(method.Path, items)}, {tokenText});");
-				}
-				else
-				{
-					builder.WriteLine($"using var response = await Client.{method.Method?.Method ?? "Get"}Async({ParsePath(method.Path, items)}, {tokenText});");
-				}
-			}
-			else
-			{
-				builder.WriteLine($"using var request = new HttpRequestMessage(HttpMethod.{method.Method?.Method ?? "Get"}, {ParsePath(method.Path, items)});");
-
-				if (headers[false].Any())
-				{
-					builder.WriteLine();
-				}
-
-				foreach (var header in headers[false])
-				{
-					var format = !String.IsNullOrEmpty(header.Location.Format)
-						? $"\"{header.Location.Format}\""
-						: String.Empty;
-
-					var result = $"{header.Name}.ToString({format})";
-
-					if (HasHoles(header.Location.Format))
-					{
-						result = $"$\"{FillHoles(header.Location.Format, header.Name)}\"";
-					}
-
-					builder.WriteLine($"request.Headers.Add(\"{header.Location.Name}\", {result});");
-				}
-
-				foreach (var header in headers[true])
-				{
-					var format = !String.IsNullOrEmpty(header.Location.Format)
-						? $"\"{header.Location.Format}\""
-						: String.Empty;
-
-					var suffix = header is { Namespace: "System", Type: "String" or "string" }
-						? String.Empty
-						: $".ToString({format})";
-
-					var result = $"{header.Name}{suffix}";
-
-					if (HasHoles(header.Location.Format))
-					{
-						result = $"$\"{FillHoles(header.Location.Format, header.Name)}\"";
-					}
-
-					builder.WriteLine();
-					builder.WriteLine($"if ({header.Name} != null)");
-					builder.WriteLine('{');
-					builder.WriteLine($"\trequest.Headers.Add(\"{header.Location.Name}\", {result});");
-					builder.WriteLine('}');
-				}
-
-				builder.WriteLine();
-
-				if (method.ReturnType is nameof(HttpResponseMessage))
-				{
-					builder.WriteLine($"var response = await Client.SendAsync(request, {tokenText});");
-				}
-				else
-				{
-					builder.WriteLine($"using var response = await Client.SendAsync(request, {tokenText});");
-				}
-			}
-
-			if (!method.AllowAnyStatusCode)
-			{
-				builder.WriteLine();
-				builder.WriteLine("response.EnsureSuccessStatusCode();");
-			}
-
-			switch (method.ReturnType)
-			{
-				case nameof(String) or "string":
-					builder.WriteLine();
-					builder.WriteLine($"return await response.Content.ReadAsStringAsync({tokenText});");
-					break;
-				case nameof(HttpResponseMessage):
-					builder.WriteLine();
-					builder.WriteLine("return response;");
-					break;
-				case nameof(Stream):
-					builder.WriteLine();
-					builder.WriteLine($"return await response.Content.ReadAsStreamAsync({tokenText});");
-					break;
-				case "byte[]":
-					builder.WriteLine();
-					builder.WriteLine($"return await response.Content.ReadAsByteArrayAsync({tokenText});");
-					break;
-
-				default:
-				{
-					if (!String.IsNullOrEmpty(method.ReturnType))
-					{
-						builder.WriteLine();
-						builder.WriteLine($"return await response.Content.ReadFromJsonAsync<{method.ReturnType}>({tokenText});");
-					}
-
-					break;
-				}
-			}
-
-			builder.Indentation--;
-			builder.WriteLine('}');
+			builder.WriteLine($"\t{{ \"{header.Name}\", \"{header.Value}\" }},");
 		}
-
-		builder.Indentation = Math.Max(builder.Indentation - 1, 0);
 
 		builder.WriteLine('}');
 
-		context.AddSource($"{source.Name}.g.cs", builder.ToSourceText());
+		builder.Indentation = 0;
+	}
+
+	private static void WriteMethods(ClassModel source, SourceWriter builder)
+	{
+		foreach (var method in source.Methods)
+		{
+			WriteMethod(method, source, builder);
+		}
+	}
+
+	private static void WriteMethod(MethodModel method, ClassModel source, SourceWriter builder)
+	{
+		var returnType = "Task";
+
+		var tokenText = method.Parameters
+			.Concat<IType>(source.Properties.Where(w => w.Location.Location == HttpLocation.Header))
+			.DistinctBy(d => d.Location.Name ?? d.Name)
+			.Where(w => w.Namespace == "System.Threading" && w.Type is nameof(CancellationToken))
+			.Select(s => s.Name)
+			.DefaultIfEmpty("CancellationToken.None")
+			.First();
+
+		if (!String.IsNullOrEmpty(method.ReturnType))
+		{
+			returnType = $"Task<{method.ReturnType}>";
+		}
+
+		builder.WriteLine();
+
+		builder.Indentation++;
+
+		builder.WriteLine($"public partial async {returnType} {method.Name}({String.Join(", ", method.Parameters.Select(s => $"{s.Type} {s.Name}"))})");
+		builder.WriteLine('{');
+		builder.Indentation++;
+
+		var items = method.Parameters
+			.Concat<IType>(source.Properties);
+
+		WriteMethodBody(method, items, tokenText, builder);
+
+		builder.Indentation--;
+		builder.WriteLine('}');
+	}
+
+	private static void WriteMethodBody(MethodModel method, IEnumerable<IType> items, string tokenText, SourceWriter builder)
+	{
+		var headers = items
+			.Where(w => w.Location.Location == HttpLocation.Header)
+			.DistinctBy(d => d.Location.Name ?? d.Name)
+			.ToLookup(g => g.IsNullable && String.IsNullOrEmpty(g.Location.Format));
+
+		if (!headers.Any())
+		{
+			WriteMethodBodyWithoutHeaders(method, items, tokenText, builder);
+		}
+		else
+		{
+			WriteMethodBodyWithHeaders(method, items, tokenText, headers, builder);
+		}
+
+		WriteMethodReturn(method, tokenText, builder);
+
+		var optionalQueries = items
+			.Where(w => w.Location.Location == HttpLocation.Query && w.IsNullable)
+			.ToList();
+
+		if (optionalQueries.Any())
+		{
+			WriteCreatePathMethod(method, optionalQueries, builder);
+		}
+	}
+
+	private static void WriteMethodBodyWithoutHeaders(MethodModel method, IEnumerable<IType> items, string tokenText, SourceWriter builder)
+	{
+		if (method.ReturnType is nameof(HttpResponseMessage))
+		{
+			builder.WriteLine($"var response = await Client.{method.Method?.Method ?? "Get"}Async({ParsePath(method.Path, items)}, {tokenText});");
+		}
+		else
+		{
+			builder.WriteLine($"using var response = await Client.{method.Method?.Method ?? "Get"}Async({ParsePath(method.Path, items)}, {tokenText});");
+		}
+	}
+
+	private static void WriteMethodBodyWithHeaders(MethodModel method, IEnumerable<IType> items, string tokenText, ILookup<bool, IType> headers, SourceWriter builder)
+	{
+		builder.WriteLine($"using var request = new HttpRequestMessage(HttpMethod.{method.Method?.Method ?? "Get"}, {ParsePath(method.Path, items)});");
+
+		if (headers[false].Any())
+		{
+			builder.WriteLine();
+		}
+
+		foreach (var header in headers[false])
+		{
+			WriteHeader(header, builder);
+		}
+
+		foreach (var header in headers[true])
+		{
+			WriteNullableHeader(header, builder);
+		}
+
+		builder.WriteLine();
+
+		if (method.ReturnType is nameof(HttpResponseMessage))
+		{
+			builder.WriteLine($"var response = await Client.SendAsync(request, {tokenText});");
+		}
+		else
+		{
+			builder.WriteLine($"using var response = await Client.SendAsync(request, {tokenText});");
+		}
+	}
+
+	private static void WriteHeader(IType header, SourceWriter builder)
+	{
+		var format = !String.IsNullOrEmpty(header.Location.Format)
+			? $"\"{header.Location.Format}\""
+			: String.Empty;
+
+		var result = $"{header.Name}.ToString({format})";
+
+		if (HasHoles(header.Location.Format))
+		{
+			result = $"$\"{FillHoles(header.Location.Format, header.Name)}\"";
+		}
+
+		builder.WriteLine($"request.Headers.Add(\"{header.Location.Name}\", {result});");
+	}
+
+	private static void WriteNullableHeader(IType header, SourceWriter builder)
+	{
+		var format = !String.IsNullOrEmpty(header.Location.Format)
+			? $"\"{header.Location.Format}\""
+			: String.Empty;
+
+		var suffix = header is { Namespace: "System", Type: "String" or "string" }
+			? String.Empty
+			: $".ToString({format})";
+
+		var result = $"{header.Name}{suffix}";
+
+		if (HasHoles(header.Location.Format))
+		{
+			result = $"$\"{FillHoles(header.Location.Format, header.Name)}\"";
+		}
+
+		builder.WriteLine();
+		builder.WriteLine($"if ({header.Name} != null)");
+		builder.WriteLine('{');
+		builder.WriteLine($"\trequest.Headers.Add(\"{header.Location.Name}\", {result});");
+		builder.WriteLine('}');
+	}
+
+	private static void WriteMethodReturn(MethodModel method, string tokenText, SourceWriter builder)
+	{
+		if (!method.AllowAnyStatusCode)
+		{
+			builder.WriteLine();
+			builder.WriteLine("response.EnsureSuccessStatusCode();");
+		}
+
+		switch (method.ReturnType)
+		{
+			case nameof(String) or "string":
+				builder.WriteLine();
+				builder.WriteLine($"return await response.Content.ReadAsStringAsync({tokenText});");
+				break;
+			case nameof(HttpResponseMessage):
+				builder.WriteLine();
+				builder.WriteLine("return response;");
+				break;
+			case nameof(Stream):
+				builder.WriteLine();
+				builder.WriteLine($"return await response.Content.ReadAsStreamAsync({tokenText});");
+				break;
+			case "byte[]":
+				builder.WriteLine();
+				builder.WriteLine($"return await response.Content.ReadAsByteArrayAsync({tokenText});");
+				break;
+
+			default:
+			{
+				if (!String.IsNullOrEmpty(method.ReturnType))
+				{
+					builder.WriteLine();
+					builder.WriteLine($"return await response.Content.ReadFromJsonAsync<{method.ReturnType}>({tokenText});");
+				}
+
+				break;
+			}
+		}
+	}
+
+	private static void WriteCreatePathMethod(MethodModel method, List<IType> optionalQueries, SourceWriter builder)
+	{
+		var hasQueries = method.Path.Contains("?");
+
+		builder.WriteLine();
+		builder.WriteLine("string CreatePath()");
+		builder.WriteLine('{');
+		builder.Indentation++;
+
+		builder.WriteLine($"DefaultInterpolatedStringHandler handler = $\"{GetPath(method.Path, method.Parameters)}\";");
+
+		if (!hasQueries && optionalQueries.Count > 1)
+		{
+			builder.WriteLine("var hasQueries = false;");
+		}
+
+		builder.WriteLine();
+
+		foreach (var query in optionalQueries)
+		{
+			WriteOptionalQuery(query, hasQueries, optionalQueries.Count, builder);
+		}
+
+		builder.WriteLine();
+		builder.WriteLine("return handler.ToString();");
+
+		builder.Indentation--;
+		builder.WriteLine('}');
+	}
+
+	private static void WriteOptionalQuery(IType query, bool hasQueries, int queryCount, SourceWriter builder)
+	{
+		builder.WriteLine($"if ({query.Name} != null)");
+		builder.WriteLine('{');
+
+		if (hasQueries)
+		{
+			builder.WriteLine($"\thandler.AppendLiteral(\"&{query.Location.Name}=\");");
+		}
+		else
+		{
+			if (queryCount > 1)
+			{
+				builder.WriteLine("\thandler.AppendLiteral(hasQueries ? \"&\" : \"?\");");
+				builder.WriteLine($"\thandler.AppendLiteral(\"{query.Location.Name}=\");");
+			}
+			else
+			{
+				builder.WriteLine($"\thandler.AppendLiteral(\"?{query.Location.Name}=\");");
+			}
+		}
+
+		if (query.Location.UrlEncode)
+		{
+			if (query is { Namespace: "System", Type: "String" or "string" })
+			{
+				builder.WriteLine($"\thandler.AppendFormatted(Uri.EscapeDataString({query.Name}));");
+			}
+			else
+			{
+				builder.WriteLine($"\thandler.AppendFormatted(Uri.EscapeDataString({query.Name}.ToString()));");
+			}
+		}
+		else
+		{
+			builder.WriteLine($"\thandler.AppendFormatted({query.Name});");
+		}
+
+		if (queryCount > 1)
+		{
+			builder.WriteLine();
+			builder.WriteLine("\thasQueries = true;");
+		}
+
+
+		builder.WriteLine('}');
+	}
+
+	private static void WriteClassEnd(SourceWriter builder)
+	{
+		builder.Indentation = Math.Max(builder.Indentation - 1, 0);
+
+		builder.WriteLine('}');
 	}
 
 	private static string ParsePath(string path, IEnumerable<IType> parameters)
+	{
+		var hasHoles = parameters.Any(a => a.Location.Location is HttpLocation.Path or HttpLocation.Query);
+
+		path = GetPath(path, parameters);
+
+		if (hasHoles)
+		{
+			if (parameters.Any(a => a.Location.Location == HttpLocation.Query && a.IsNullable))
+			{
+				return $"CreatePath()";
+			}
+
+			return $"$\"{path}\"";
+		}
+
+		return $"\"{path}\"";
+	}
+
+	public static string AddQueryString(string uri, IEnumerable<KeyValuePair<string, string?>> queryString)
+	{
+		var anchorIndex = uri.IndexOf('#');
+		var uriToBeAppended = uri.AsSpan();
+		var anchorText = ReadOnlySpan<char>.Empty;
+		// If there is an anchor, then the query string must be inserted before its first occurrence.
+		if (anchorIndex != -1)
+		{
+			anchorText = uriToBeAppended.Slice(anchorIndex);
+			uriToBeAppended = uriToBeAppended.Slice(0, anchorIndex);
+		}
+
+		var queryIndex = uriToBeAppended.IndexOf('?');
+		var hasQuery = queryIndex != -1;
+
+		var sb = new StringBuilder();
+		sb.Append(uriToBeAppended.ToString());
+
+		foreach (var parameter in queryString)
+		{
+			if (parameter.Value == null)
+			{
+				continue;
+			}
+
+			sb.Append(hasQuery ? '&' : '?');
+			sb.Append(Uri.EscapeDataString(parameter.Key));
+			sb.Append('=');
+			sb.Append(parameter.Value);
+			hasQuery = true;
+		}
+
+		sb.Append(anchorText.ToString());
+		return sb.ToString();
+	}
+
+	private static bool HasHoles(string value)
+	{
+		return _holeRegex.IsMatch(value);
+	}
+
+	private static string FillHoles(string value, params string[] fieldName)
+	{
+		return _holeRegex.Replace(value, m =>
+		{
+			var result = m.Value;
+
+			for (var i = 0; i < fieldName.Length; i++)
+			{
+				result = m.Value.Replace(i.ToString(), fieldName[i]);
+			}
+
+			if (result == m.Value)
+			{
+				result = result
+					.Replace("{", "{{")
+					.Replace("}", "}}");
+			}
+
+			return result;
+		});
+	}
+
+	private static string GetPath(string path, IEnumerable<IType> parameters)
 	{
 		var hasHoles = parameters.Any(a => a.Location.Location is HttpLocation.Path or HttpLocation.Query);
 
@@ -329,82 +560,6 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 				? $"{{{s.Name}}}"
 				: $"{{{s.Name}:{s.Location.Format}}}")));
 
-		// foreach (var parameter in parameters)
-		// {
-		// 	if (parameter.Location == HttpLocation.Path)
-		// 	{
-		// 		path = path.Replace($"{{{parameter.Name}}}", $"{{{parameter.Name}}}");
-		// 	}
-		// }
-
-		if (hasHoles)
-		{
-			return $"$\"{path}\"";
-		}
-
-		return $"\"{path}\"";
-	}
-
-	public static string AddQueryString(string uri, IEnumerable<KeyValuePair<string, string?>> queryString)
-	{
-		var anchorIndex = uri.IndexOf('#');
-		var uriToBeAppended = uri.AsSpan();
-		var anchorText = ReadOnlySpan<char>.Empty;
-		// If there is an anchor, then the query string must be inserted before its first occurrence.
-		if (anchorIndex != -1)
-		{
-			anchorText = uriToBeAppended.Slice(anchorIndex);
-			uriToBeAppended = uriToBeAppended.Slice(0, anchorIndex);
-		}
-
-		var queryIndex = uriToBeAppended.IndexOf('?');
-		var hasQuery = queryIndex != -1;
-
-		var sb = new StringBuilder();
-		sb.Append(uriToBeAppended.ToString());
-
-		foreach (var parameter in queryString)
-		{
-			if (parameter.Value == null)
-			{
-				continue;
-			}
-
-			sb.Append(hasQuery ? '&' : '?');
-			sb.Append(Uri.EscapeUriString(parameter.Key));
-			sb.Append('=');
-			sb.Append(parameter.Value);
-			hasQuery = true;
-		}
-
-		sb.Append(anchorText.ToString());
-		return sb.ToString();
-	}
-
-	private static bool HasHoles(string value)
-	{
-		return _holeRegex.IsMatch(value);
-	}
-
-	private static string FillHoles(string value, params string[] fieldName)
-	{
-		return _holeRegex.Replace(value, m =>
-		{
-			var result = m.Value;
-
-			for (var i = 0; i < fieldName.Length; i++)
-			{
-				result = m.Value.Replace(i.ToString(), fieldName[i]);
-			}
-
-			if (result == m.Value)
-			{
-				result = result
-					.Replace("{", "{{")
-					.Replace("}", "}}");
-			}
-
-			return result;
-		});
+		return path;
 	}
 }
