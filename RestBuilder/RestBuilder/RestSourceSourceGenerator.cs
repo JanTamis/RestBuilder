@@ -367,7 +367,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		}
 
 		builder.WriteLine();
-		builder.WriteLine("return handler.ToString();");
+		builder.WriteLine("return handler.ToStringAndClear();");
 
 		builder.Indentation--;
 		builder.WriteLine('}');

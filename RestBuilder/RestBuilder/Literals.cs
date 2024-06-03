@@ -590,8 +590,7 @@ public static class Literals
 			/// <summary>
 			/// Initialises a new instance of the <see cref="BodyAttribute"/> class
 			/// </summary>
-			public BodyAttribute()
-				: this(BodySerializationMethod.Default)
+			public BodyAttribute() : this(BodySerializationMethod.Default)
 			{
 			}
 	
