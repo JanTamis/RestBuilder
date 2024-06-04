@@ -18,14 +18,27 @@ public static class ClassParser
 	{
 		var namespaceName = classSymbol.ContainingNamespace.ToDisplayString();
 		var className = classDeclaration!.Identifier.Text;
-		var baseAddress = attributes.First(f => f.AttributeClass.Name == "BaseAddressAttribute").ConstructorArguments[0].Value as string;
+		var baseAddress = classSymbol
+			.GetAttributes()
+			.Where(w => w.AttributeClass.Name == nameof(Literals.BaseAddressAttribute))
+			.Select(s => s.GetValue(0, String.Empty))
+			.FirstOrDefault();
 
 		var source = new ClassModel
 		{
 			Name = className,
 			Namespace = namespaceName,
 			IsStatic = classDeclaration.Modifiers.Any(SyntaxKind.StaticKeyword),
-			BaseAddress = baseAddress,
+			ClientName = classSymbol
+				.GetAttributes()
+				.Where(w => w.AttributeClass.Name == nameof(Literals.RestClientAttribute))
+				.Select(s => s.GetValue(0, String.Empty))
+				.FirstOrDefault(),
+			BaseAddress = classSymbol
+				.GetAttributes()
+				.Where(w => w.AttributeClass.Name == nameof(Literals.BaseAddressAttribute))
+				.Select(s => s.GetValue(0, String.Empty))
+				.FirstOrDefault(),
 			Attributes = GetLocationAttributes(classSymbol.GetAttributes(), HttpLocation.None)
 				.ToImmutableEquatableArray(),
 			Methods = classSymbol

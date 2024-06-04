@@ -22,7 +22,7 @@ namespace RestBuilder;
 [Generator]
 public class RestSourceSourceGenerator : IIncrementalGenerator
 {
-	private static readonly Regex _holeRegex = new Regex(@"\{\d+(:[^}]*)?\}");
+	private static readonly Regex HoleRegex = new Regex(@"\{\d+(:[^}]*)?\}");
 
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
@@ -59,9 +59,13 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			"BodyAttribute.g.cs",
 			SourceText.From(Literals.BodyAttribute, Encoding.UTF8)));
 
+		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
+			"RestClient.g.cs",
+			SourceText.From(Literals.RestClientAttribute, Encoding.UTF8)));
+
 		var classes = context.SyntaxProvider
 			.ForAttributeWithMetadataName(
-				$"{Literals.BaseNamespace}.{Literals.BaseAddressAttribute}",
+				$"{Literals.BaseNamespace}.{nameof(Literals.RestClientAttribute)}",
 				(node, token) => node is ClassDeclarationSyntax classDeclaration && classDeclaration.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)),
 				GenerateSource);
 
@@ -114,23 +118,46 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 	private static void WriteClassStart(ClassModel source, SourceWriter builder)
 	{
+		var hasHeaders = source.Attributes.Any(a => a.Location == HttpLocation.Header);
+
 		builder.WriteLine($$"""
-			
+				
 			namespace {{source.Namespace}};
 			
 			public partial class {{source.Name}}
 			{
-				public HttpClient Client { get; } = new HttpClient() 
-				{ 
-					BaseAddress = new Uri("{{source.BaseAddress}}"),
 			""");
 
-		if (source.Attributes.Any(a => a.Location == HttpLocation.Header))
+		builder.Indentation = 1;
+
+		if (!hasHeaders && String.IsNullOrEmpty(source.BaseAddress))
+		{
+			builder.WriteLine($"public HttpClient {source.ClientName} {{ get; }} = new HttpClient();");
+		}
+		else
+		{
+			builder.WriteLine($$"""
+				public HttpClient {{source.ClientName}} { get; } = new HttpClient() 
+				{
+				""");
+		}
+
+		if (!String.IsNullOrEmpty(source.BaseAddress))
+		{
+			builder.WriteLine($"\tBaseAddress = new Uri(\"{source.BaseAddress}\"),");
+		}
+
+		if (hasHeaders)
 		{
 			WriteDefaultRequestHeaders(source, builder);
 		}
 
-		builder.WriteLine("\t};");
+		if (hasHeaders || !String.IsNullOrEmpty(source.BaseAddress))
+		{
+			builder.WriteLine("\t};");
+		}
+
+		builder.Indentation = 0;
 	}
 
 	private static void WriteDefaultRequestHeaders(ClassModel source, SourceWriter builder)
@@ -186,26 +213,29 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		var items = method.Parameters
 			.Concat<IType>(source.Properties);
 
-		WriteMethodBody(method, items, tokenText, builder);
+		WriteMethodBody(method, source.ClientName, items, tokenText, builder);
 
 		builder.Indentation--;
 		builder.WriteLine('}');
 	}
 
-	private static void WriteMethodBody(MethodModel method, IEnumerable<IType> items, string tokenText, SourceWriter builder)
+	private static void WriteMethodBody(MethodModel method, string clientName, IEnumerable<IType> items, string tokenText, SourceWriter builder)
 	{
 		var headers = items
 			.Where(w => w.Location.Location == HttpLocation.Header)
 			.DistinctBy(d => d.Location.Name ?? d.Name)
 			.ToLookup(g => g.IsNullable && String.IsNullOrEmpty(g.Location.Format));
 
-		if (!headers.Any())
+		var bodies = items
+			.Where(w => w.Location.Location == HttpLocation.Body)
+
+		if (!headers.Any() && !bodies.Any())
 		{
-			WriteMethodBodyWithoutHeaders(method, items, tokenText, builder);
+			WriteMethodBodyWithoutHeaders(method, clientName, items, tokenText, builder);
 		}
 		else
 		{
-			WriteMethodBodyWithHeaders(method, items, tokenText, headers, builder);
+			WriteMethodBodyWithHeaders(method, clientName, items, tokenText, headers, bodies.FirstOrDefault(), builder);
 		}
 
 		WriteMethodReturn(method, tokenText, builder);
@@ -220,19 +250,19 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		}
 	}
 
-	private static void WriteMethodBodyWithoutHeaders(MethodModel method, IEnumerable<IType> items, string tokenText, SourceWriter builder)
+	private static void WriteMethodBodyWithoutHeaders(MethodModel method, string clientName, IEnumerable<IType> items, string tokenText, SourceWriter builder)
 	{
 		if (method.ReturnType is nameof(HttpResponseMessage))
 		{
-			builder.WriteLine($"var response = await Client.{method.Method?.Method ?? "Get"}Async({ParsePath(method.Path, items)}, {tokenText});");
+			builder.WriteLine($"var response = await {clientName}.{method.Method?.Method ?? "Get"}Async({ParsePath(method.Path, items)}, {tokenText});");
 		}
 		else
 		{
-			builder.WriteLine($"using var response = await Client.{method.Method?.Method ?? "Get"}Async({ParsePath(method.Path, items)}, {tokenText});");
+			builder.WriteLine($"using var response = await {clientName}.{method.Method?.Method ?? "Get"}Async({ParsePath(method.Path, items)}, {tokenText});");
 		}
 	}
 
-	private static void WriteMethodBodyWithHeaders(MethodModel method, IEnumerable<IType> items, string tokenText, ILookup<bool, IType> headers, SourceWriter builder)
+	private static void WriteMethodBodyWithHeaders(MethodModel method, string clientName, IEnumerable<IType> items, string tokenText, ILookup<bool, IType> headers, IType? body, SourceWriter builder)
 	{
 		builder.WriteLine($"using var request = new HttpRequestMessage(HttpMethod.{method.Method?.Method ?? "Get"}, {ParsePath(method.Path, items)});");
 
@@ -251,15 +281,21 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			WriteNullableHeader(header, builder);
 		}
 
+		if (body != null)
+		{
+			builder.WriteLine();
+			WriteRequestBody(body, builder);
+		}
+
 		builder.WriteLine();
 
 		if (method.ReturnType is nameof(HttpResponseMessage))
 		{
-			builder.WriteLine($"var response = await Client.SendAsync(request, {tokenText});");
+			builder.WriteLine($"var response = await {clientName}.SendAsync(request, {tokenText});");
 		}
 		else
 		{
-			builder.WriteLine($"using var response = await Client.SendAsync(request, {tokenText});");
+			builder.WriteLine($"using var response = await {clientName}.SendAsync(request, {tokenText});");
 		}
 	}
 
@@ -485,12 +521,12 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 	private static bool HasHoles(string value)
 	{
-		return _holeRegex.IsMatch(value);
+		return HoleRegex.IsMatch(value);
 	}
 
 	private static string FillHoles(string value, params string[] fieldName)
 	{
-		return _holeRegex.Replace(value, m =>
+		return HoleRegex.Replace(value, m =>
 		{
 			var result = m.Value;
 
@@ -561,5 +597,23 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 				: $"{{{s.Name}:{s.Location.Format}}}")));
 
 		return path;
+	}
+
+	private static void WriteRequestBody(IType body, SourceWriter builder)
+	{
+		switch (body)
+		{
+			case { Namespace: "System", Type: "string" or "String" }:
+				builder.WriteLine("request.Body = new StringContent(body);");
+				break;
+			case { Namespace: "System", Type: "byte[]" }: 
+				builder.WriteLine("request.Body = new ByteArrayContent(body);");
+				break;
+			case { Namespace: "System.IO", Type: "Stream" }:
+				builder.WriteLine("request.Body = new StreamContent(body);");
+				break;
+			default:
+				builder.WriteLine("request.Content = JsonContent.Create(body);");
+		}
 	}
 }

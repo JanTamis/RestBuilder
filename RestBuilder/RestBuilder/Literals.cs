@@ -625,4 +625,30 @@ public static class Literals
 			Default,
 		}
 		""";
+
+	public const string RestClientAttribute = $$"""
+		using System;
+
+		#nullable enable
+
+		namespace {{BaseNamespace}};
+
+		[AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
+		public sealed class RestClientAttribute : Attribute
+		{
+			/// <summary>
+			/// Gets the name set in this attribute
+			/// </summary>
+			public string Name { get; }
+			
+			/// <summary>
+			/// Initialises a new instance of the <see cref="RestClientAttribute"/> class with the given name
+			/// </summary>
+			/// <param name="name">Name to use</param>
+			public RestClientAttribute(string name)
+			{
+				Name = name;
+			}
+		}
+		""";
 }

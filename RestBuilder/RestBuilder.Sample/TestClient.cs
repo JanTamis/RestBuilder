@@ -1,10 +1,9 @@
-using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace RestBuilder.Sample;
 
+[RestClient("Client")]
 [BaseAddress("https://api.example.com/")]
 [Header("Authorization", "Bearer 123")]
 public partial class TestClient
@@ -13,6 +12,6 @@ public partial class TestClient
 	[AllowAnyStatusCode]
 	public partial Task<string> GetUserAsync(
 		[Path("username")] string name,
-		[Query("password", UrlEncode = false)] string password,
+		[Header("password")] string password,
 		CancellationToken token);
 }
