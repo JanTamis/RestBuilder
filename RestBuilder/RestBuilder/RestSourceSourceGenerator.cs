@@ -227,7 +227,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			.ToLookup(g => g.IsNullable && String.IsNullOrEmpty(g.Location.Format));
 
 		var bodies = items
-			.Where(w => w.Location.Location == HttpLocation.Body)
+			.Where(w => w.Location.Location == HttpLocation.Body);
 
 		if (!headers.Any() && !bodies.Any())
 		{
@@ -614,6 +614,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 				break;
 			default:
 				builder.WriteLine("request.Content = JsonContent.Create(body);");
+				break;
 		}
 	}
 }
