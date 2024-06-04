@@ -12,6 +12,6 @@ public partial class TestClient
 	[AllowAnyStatusCode]
 	public partial Task<string> GetUserAsync(
 		[Path("username")] string name,
-		[Header("password")] string password,
+		[Body] string password,
 		CancellationToken token);
 }

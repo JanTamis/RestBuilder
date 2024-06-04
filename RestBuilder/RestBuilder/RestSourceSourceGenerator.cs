@@ -604,16 +604,16 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		switch (body)
 		{
 			case { Namespace: "System", Type: "string" or "String" }:
-				builder.WriteLine("request.Body = new StringContent(body);");
+				builder.WriteLine($"request.Content = new StringContent({body.Name});");
 				break;
 			case { Namespace: "System", Type: "byte[]" }: 
-				builder.WriteLine("request.Body = new ByteArrayContent(body);");
+				builder.WriteLine($"request.Content = new ByteArrayContent({body.Name});");
 				break;
 			case { Namespace: "System.IO", Type: "Stream" }:
-				builder.WriteLine("request.Body = new StreamContent(body);");
+				builder.WriteLine($"request.Content = new StreamContent({body.Name});");
 				break;
 			default:
-				builder.WriteLine("request.Content = JsonContent.Create(body);");
+				builder.WriteLine($"request.Content = JsonContent.Create({body.Name});");
 				break;
 		}
 	}
