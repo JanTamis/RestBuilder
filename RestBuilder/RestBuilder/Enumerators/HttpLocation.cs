@@ -8,4 +8,5 @@ public enum HttpLocation
 	Header,
 	Body,
 	Raw,
+	QueryMap,
 }

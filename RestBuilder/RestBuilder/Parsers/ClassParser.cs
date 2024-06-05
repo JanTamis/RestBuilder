@@ -166,7 +166,7 @@ public static class ClassParser
 
 		if (result?.GetType() == typeof(T))
 		{
-			return (T) result;
+			return (T)result;
 		}
 
 		return defaultValue;
@@ -182,7 +182,7 @@ public static class ClassParser
 		foreach (var item in attributes.NamedArguments)
 		{
 			var result = item.Value.Value;
-			
+
 			if (item.Key == name && result != null && result.GetType() == typeof(T))
 			{
 				return (T)result;
@@ -210,11 +210,12 @@ public static class ClassParser
 			{
 				Location = y.AttributeClass.Name switch
 				{
-					nameof(Literals.QueryAttribute)  => HttpLocation.Query,
+					nameof(Literals.QueryAttribute) => HttpLocation.Query,
 					nameof(Literals.HeaderAttribute) => HttpLocation.Header,
-					nameof(Literals.PathAttribute)   => HttpLocation.Path,
-					nameof(Literals.BodyAttribute)   => HttpLocation.Body,
-					_                                => defaultLocation
+					nameof(Literals.PathAttribute) => HttpLocation.Path,
+					nameof(Literals.BodyAttribute) => HttpLocation.Body,
+					nameof(Literals.QueryMapAttribute) => HttpLocation.QueryMap,
+					_ => defaultLocation
 				},
 				Format = y.GetValue("Format", String.Empty),
 				Name = y.GetValue<string?>(0, null) ?? y.GetValue<string?>("Name", null),
