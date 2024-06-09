@@ -18,11 +18,13 @@ public static class ClassParser
 	{
 		var namespaceName = classSymbol.ContainingNamespace.ToDisplayString();
 		var className = classDeclaration!.Identifier.Text;
+		
 		var baseAddress = classSymbol
 			.GetAttributes()
 			.Where(w => w.AttributeClass.Name == nameof(Literals.BaseAddressAttribute))
 			.Select(s => s.GetValue(0, String.Empty))
-			.FirstOrDefault();
+			.FirstOrDefault()
+			.TrimEnd('?', '&');
 
 		var source = new ClassModel
 		{
@@ -34,11 +36,7 @@ public static class ClassParser
 				.Where(w => w.AttributeClass.Name == nameof(Literals.RestClientAttribute))
 				.Select(s => s.GetValue(0, String.Empty))
 				.FirstOrDefault(),
-			BaseAddress = classSymbol
-				.GetAttributes()
-				.Where(w => w.AttributeClass.Name == nameof(Literals.BaseAddressAttribute))
-				.Select(s => s.GetValue(0, String.Empty))
-				.FirstOrDefault(),
+			BaseAddress = baseAddress,
 			Attributes = GetLocationAttributes(classSymbol.GetAttributes(), HttpLocation.None)
 				.ToImmutableEquatableArray(),
 			Methods = classSymbol
@@ -67,6 +65,11 @@ public static class ClassParser
 							IsNullable = x.Type.IsReferenceType,
 							Namespace = x.Type.ContainingNamespace?.ToString(),
 							Location = GetLocationAttribute(x.GetAttributes(), HttpLocation.Query),
+							GenericTypes = x.Type is INamedTypeSymbol { TypeArguments.Length: > 0 } namedTypeSymbol
+								? namedTypeSymbol.TypeArguments
+									.Select(GetTypeModel)
+									.ToImmutableEquatableArray()
+								: ImmutableEquatableArray<TypeModel>.Empty
 						})
 						.ToImmutableEquatableArray(),
 					AllowAnyStatusCode = s.GetAttributes()
@@ -222,5 +225,64 @@ public static class ClassParser
 				Value = y.GetValue<string?>(1, null) ?? y.GetValue<string?>("Value", null),
 				UrlEncode = y.GetValue("UrlEncode", true)
 			});
+	}
+
+	private static bool IsCollection(ITypeSymbol type)
+	{
+		if (type.ContainingNamespace?.ToString() == "System" && type.Name == "String")
+		{
+			return false;
+		}
+		
+		if (type is IArrayTypeSymbol)
+		{
+			return true;
+		}
+
+		foreach (var @interface in type.AllInterfaces)
+		{
+			if (@interface.ContainingNamespace?.ToString() == "System.Collections.Generic" && @interface.Name == "IEnumerable")
+			{
+				return true;
+			}
+		}
+		
+		return false;
+	}
+
+	private static TypeModel? GetCollectionItemType(ITypeSymbol type)
+	{
+		if (type.ContainingNamespace?.ToString() == "System" && type.Name == "String")
+		{
+			return null;
+		}
+
+		if (type is IArrayTypeSymbol arrayTypeSymbol)
+		{
+			return GetTypeModel(arrayTypeSymbol.ElementType);
+		}
+
+		foreach (var @interface in type.AllInterfaces)
+		{
+			if (@interface.ContainingNamespace?.ToString() == "System.Collections.Generic" && @interface.Name == "IEnumerable")
+			{
+				return GetTypeModel(@interface.TypeArguments[0]);
+			}
+		}
+
+		return null;
+	}
+
+	private static TypeModel GetTypeModel(ITypeSymbol type)
+	{
+		return new TypeModel
+		{
+			Name = type.Name,
+			IsNullable = type.IsReferenceType,
+			IsCollection = IsCollection(type),
+			Namespace = type.ContainingNamespace?.ToString(),
+			CollectionType = GetCollectionItemType(type),
+			Type = ToName(type),
+		};
 	}
 }
