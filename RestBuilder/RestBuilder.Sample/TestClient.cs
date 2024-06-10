@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
@@ -14,6 +15,6 @@ public partial class TestClient
 	[AllowAnyStatusCode]
 	public partial Task<string> GetUserAsync(
 		[Path("username")] string name,
-		[QueryMap] IDictionary<int, string> password,
+		[QueryMap(Format = "X2", UrlEncode = true)] IDictionary<int, List<double>> password,
 		CancellationToken token);
 }
