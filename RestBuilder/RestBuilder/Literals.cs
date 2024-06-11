@@ -694,8 +694,7 @@ public static class Literals
 			/// <summary>
 			/// Initialises a new instance of the <see cref="QueryMapAttribute"/> class
 			/// </summary>
-			public QueryMapAttribute()
-					: this(QuerySerializationMethod.Default)
+			public QueryMapAttribute() : this(QuerySerializationMethod.Default)
 			{
 			}
 
@@ -714,14 +713,13 @@ public static class Literals
 		using System;
 		
 		namespace {{BaseNamespace}};
+
+		/// <summary>
+		/// Marks a parameter as being a raw query string, which is inserted as-is into the query string
+		/// </summary>
+		[AttributeUsage(AttributeTargets.Parameter, Inherited = false, AllowMultiple = false)]
+		public class RawQueryStringAttribute : Attribute
 		{
-			/// <summary>
-			/// Marks a parameter as being a raw query string, which is inserted as-is into the query string
-			/// </summary>
-			[AttributeUsage(AttributeTargets.Parameter, Inherited = false, AllowMultiple = false)]
-			public class RawQueryStringAttribute : Attribute
-			{
-			}
 		}
 		""";
 }

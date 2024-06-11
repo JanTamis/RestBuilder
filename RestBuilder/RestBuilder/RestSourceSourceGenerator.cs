@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -397,18 +398,20 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		builder.WriteLine('{');
 		builder.Indentation++;
 
+		var hasVariable = !hasQueries && ((optionalQueries.Count > 1 || optionalQueries[0].Location.Location == HttpLocation.QueryMap) || optionalQueries.Any(a => a is ParameterModel { IsCollection: true }));
+
 		builder.WriteLine($"DefaultInterpolatedStringHandler handler = $\"{GetPath(method.Path, method.Parameters)}\";");
 
-		if (!hasQueries && ((optionalQueries.Count > 1 || optionalQueries[0].Location.Location == HttpLocation.QueryMap) || optionalQueries.Any(a => a is ParameterModel { IsCollection: true })))
+		if (hasVariable)
 		{
 			builder.WriteLine("var hasQueries = false;");
 		}
 
 		// builder.WriteLine();
 
-		foreach (var query in optionalQueries)
+		for (int i = 0; i < optionalQueries.Count; i++)
 		{
-			WriteOptionalQuery(query as ParameterModel, hasQueries, optionalQueries.Count, builder);
+			WriteOptionalQuery(optionalQueries[i] as ParameterModel, hasQueries, hasVariable, i == 0, optionalQueries.Count, builder);
 		}
 
 		builder.WriteLine();
@@ -418,7 +421,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		builder.WriteLine('}');
 	}
 
-	private static void WriteOptionalQuery(ParameterModel query, bool hasQueries, int queryCount, SourceWriter builder)
+	private static void WriteOptionalQuery(ParameterModel query, bool hasQueries, bool hasVariable, bool isFirst, int queryCount, SourceWriter builder)
 	{
 		if (query.Location is { Location: HttpLocation.QueryMap } && query is { GenericTypes: { Length: 2 } genericTypes })
 		{
@@ -479,23 +482,35 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 			if (hasQueries)
 			{
-				builder.WriteLine("\thandler.AppendLiteral(\"&\");");
+				builder.WriteLine($"\thandler.AppendLiteral(\"&{query.Location.Name ?? query.Name}=\");");
 			}
 			else
 			{
-				builder.WriteLine("\thandler.AppendLiteral(hasQueries ? \"&\" : \"?\");");
+				if (!isFirst)
+				{
+					builder.WriteLine("\thandler.AppendLiteral(hasQueries ? \"&\" : \"?\");");
+					builder.WriteLine($"\thandler.AppendLiteral(\"{query.Location.Name ?? query.Name}=\");");
+				}
+				else
+				{
+					builder.WriteLine($"\thandler.AppendLiteral(\"?{query.Location.Name ?? query.Name}=\");");
+				}
 			}
-			
+
 			builder.WriteLine($"\thandler.AppendLiteral({query.Name});");
-			builder.WriteLine();
-			builder.WriteLine("\thasQueries = true;");
+
+			if (hasVariable)
+			{
+				builder.WriteLine();
+				builder.WriteLine("\thasQueries = true;");
+			}
 			
 			builder.WriteLine('}');
 			
 			return;
 		}
 
-		
+		builder.WriteLine();
 		builder.WriteLine($"if ({query.Name} != null)");
 		builder.WriteLine('{');
 		
@@ -529,13 +544,38 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		}
 		else
 		{
+			//if (hasQueries)
+			//{
+			//	builder.WriteLine($"handler.AppendLiteral(\"&{query.Location.Name ?? query.Name}=\");");
+			//}
+			//else
+			//{
+			//	if (queryCount > 1)
+			//	{
+			//		if (isFirst)
+			//		{
+			//			builder.WriteLine("handler.AppendLiteral(\"?\");");
+			//		}
+			//		else
+			//		{
+			//			builder.WriteLine("handler.AppendLiteral(hasQueries ? \"&\" : \"?\");");
+			//		}
+
+			//		builder.WriteLine($"handler.AppendLiteral(\"{query.Location.Name ?? query.Name}=\");");
+			//	}
+			//	else
+			//	{
+			//		builder.WriteLine($"handler.AppendLiteral(\"?{query.Location.Name ?? query.Name}=\");");
+			//	}
+			//}
+
 			if (hasQueries)
 			{
 				builder.WriteLine($"handler.AppendLiteral(\"&{query.Location.Name ?? query.Name}=\");");
 			}
 			else
 			{
-				if (queryCount > 1)
+				if (!isFirst)
 				{
 					builder.WriteLine("handler.AppendLiteral(hasQueries ? \"&\" : \"?\");");
 					builder.WriteLine($"handler.AppendLiteral(\"{query.Location.Name ?? query.Name}=\");");
