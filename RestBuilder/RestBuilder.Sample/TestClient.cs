@@ -1,5 +1,3 @@
-using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,10 +9,10 @@ namespace RestBuilder.Sample;
 [Header("Authorization", "Bearer 123")]
 public partial class TestClient
 {
-	[Get("{username}/User")]
+	[Get("{username}/User?")]
 	[AllowAnyStatusCode]
 	public partial Task<string> GetUserAsync(
 		[Path("username")] string name,
-		[QueryMap(Format = "X2", UrlEncode = true)] IDictionary<int, List<double>> password,
+		[RawQueryString] string password,
 		CancellationToken token);
 }

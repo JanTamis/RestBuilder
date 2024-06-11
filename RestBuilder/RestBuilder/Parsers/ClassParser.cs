@@ -56,7 +56,8 @@ public static class ClassParser
 					Path = s.GetAttributes()
 						.Where(x => IsValidHttpMethod(x.AttributeClass.Name.Replace(nameof(Attribute), String.Empty)))
 						.Select(x => x.GetValue(0, String.Empty))
-						.FirstOrDefault(),
+						.FirstOrDefault()
+						.TrimEnd('?', '&'),
 					Parameters = s.Parameters
 						.Select(x => new ParameterModel
 						{
@@ -69,7 +70,9 @@ public static class ClassParser
 								? namedTypeSymbol.TypeArguments
 									.Select(GetTypeModel)
 									.ToImmutableEquatableArray()
-								: ImmutableEquatableArray<TypeModel>.Empty
+								: ImmutableEquatableArray<TypeModel>.Empty,
+							IsCollection = IsCollection(x.Type),
+							CollectionType = GetCollectionItemType(x.Type)
 						})
 						.ToImmutableEquatableArray(),
 					AllowAnyStatusCode = s.GetAttributes()
@@ -218,6 +221,7 @@ public static class ClassParser
 					nameof(Literals.PathAttribute) => HttpLocation.Path,
 					nameof(Literals.BodyAttribute) => HttpLocation.Body,
 					nameof(Literals.QueryMapAttribute) => HttpLocation.QueryMap,
+					nameof(Literals.RawQueryStringAttribute) => HttpLocation.Raw,
 					_ => defaultLocation
 				},
 				Format = y.GetValue("Format", String.Empty),
@@ -246,8 +250,8 @@ public static class ClassParser
 				return true;
 			}
 		}
-		
-		return false;
+
+		return type.ContainingNamespace?.ToString() == "System.Collections.Generic" && type.Name == "IEnumerable";
 	}
 
 	private static TypeModel? GetCollectionItemType(ITypeSymbol type)
@@ -268,6 +272,11 @@ public static class ClassParser
 			{
 				return GetTypeModel(@interface.TypeArguments[0]);
 			}
+		}
+
+		if (type.ContainingNamespace?.ToString() == "System.Collections.Generic" && type.Name == "IEnumerable" && type is INamedTypeSymbol namedTypeSymbol)
+		{
+			return GetTypeModel(namedTypeSymbol.TypeArguments[0]);
 		}
 
 		return null;

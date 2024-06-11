@@ -11,6 +11,10 @@ public record ParameterModel : IType
 	public string Namespace { get; set; }
 	
 	public LocationAttributeModel Location { get; set; }
+
+	public bool IsCollection { get; set; }
+
+	public TypeModel? CollectionType { get; set; }
 	
 	public bool IsNullable { get; set; }
 

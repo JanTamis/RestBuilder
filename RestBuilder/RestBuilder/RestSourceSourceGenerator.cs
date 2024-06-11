@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Reflection.Metadata;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -66,6 +67,10 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
 			"QueryMapAttribute.g.cs",
 			SourceText.From(Literals.QueryMapAttribute, Encoding.UTF8)));
+		
+		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
+			"RawQueryStringAttribute.g.cs",
+			SourceText.From(Literals.RawQueryStringAttribute, Encoding.UTF8)));
 
 		var classes = context.SyntaxProvider
 			.ForAttributeWithMetadataName(
@@ -245,7 +250,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		WriteMethodReturn(method, tokenText, builder);
 
 		var optionalQueries = items
-			.Where(w => w.Location.Location == HttpLocation.Query && w.IsNullable || w.Location.Location == HttpLocation.QueryMap)
+			.Where(w => w.Location.Location == HttpLocation.Query && w.IsNullable || w.Location.Location == HttpLocation.QueryMap || (w.Location.Location == HttpLocation.Raw && w.IsNullable))
 			.ToList();
 
 		if (optionalQueries.Any())
@@ -394,7 +399,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 		builder.WriteLine($"DefaultInterpolatedStringHandler handler = $\"{GetPath(method.Path, method.Parameters)}\";");
 
-		if (!hasQueries && (optionalQueries.Count > 1 || optionalQueries[0].Location.Location == HttpLocation.QueryMap))
+		if (!hasQueries && ((optionalQueries.Count > 1 || optionalQueries[0].Location.Location == HttpLocation.QueryMap) || optionalQueries.Any(a => a is ParameterModel { IsCollection: true })))
 		{
 			builder.WriteLine("var hasQueries = false;");
 		}
@@ -403,7 +408,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 		foreach (var query in optionalQueries)
 		{
-			WriteOptionalQuery(query, hasQueries, optionalQueries.Count, builder);
+			WriteOptionalQuery(query as ParameterModel, hasQueries, optionalQueries.Count, builder);
 		}
 
 		builder.WriteLine();
@@ -413,9 +418,9 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		builder.WriteLine('}');
 	}
 
-	private static void WriteOptionalQuery(IType query, bool hasQueries, int queryCount, SourceWriter builder)
+	private static void WriteOptionalQuery(ParameterModel query, bool hasQueries, int queryCount, SourceWriter builder)
 	{
-		if (query.Location is { Location: HttpLocation.QueryMap } && query is ParameterModel { GenericTypes: { Length: 2 } genericTypes })
+		if (query.Location is { Location: HttpLocation.QueryMap } && query is { GenericTypes: { Length: 2 } genericTypes })
 		{
 			builder.WriteLine();
 			builder.WriteLine($"foreach (var item in {query.Name})");
@@ -425,11 +430,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 			if (!genericTypes[1].IsCollection && genericTypes[1].IsNullable)
 			{
-				builder.WriteLine($"if (item.Value is null)");
-				builder.WriteLine('{');
-				builder.WriteLine("\tcontinue;");
-				builder.WriteLine('}');
-				builder.WriteLine();
+				AppendContinue("item.Value");
 			}
 
 			builder.WriteLine($"var key = {ParseField("item.Key", genericTypes[0], query.Location)};");
@@ -439,11 +440,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			{
 				if (genericTypes[1].IsNullable)
 				{
-					builder.WriteLine($"if (item.Value is null)");
-					builder.WriteLine('{');
-					builder.WriteLine("\tcontinue;");
-					builder.WriteLine('}');
-					builder.WriteLine();
+					AppendContinue("item.Value");
 				}
 
 				builder.WriteLine("foreach (var value in item.Value)");
@@ -453,31 +450,10 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 				if (genericTypes[1].CollectionType.IsNullable)
 				{
-					builder.WriteLine($"if (value is null)");
-					builder.WriteLine('{');
-					builder.WriteLine("\tcontinue;");
-					builder.WriteLine('}');
-					builder.WriteLine();
+					AppendContinue("value");
 				}
 				
-				if (hasQueries)
-				{
-					builder.WriteLine("handler.AppendLiteral(\"&\");");
-				}
-				else
-				{
-					builder.WriteLine("handler.AppendLiteral(hasQueries ? \"&\" : \"?\");");
-				}
-				
-				builder.WriteLine("handler.AppendFormatted(key);");
-				builder.WriteLine("handler.AppendLiteral(\"=\");");
-				builder.WriteLine($"handler.AppendFormatted({ParseField("value", genericTypes[1].CollectionType, query.Location)});");
-				
-				if (!hasQueries)
-				{
-					builder.WriteLine();
-					builder.WriteLine("hasQueries = true;");
-				}
+				AppendQueryItem("value", genericTypes[1].CollectionType);
 				
 				builder.Indentation--;
 				
@@ -485,24 +461,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			}
 			else
 			{
-				if (hasQueries)
-				{
-					builder.WriteLine("handler.AppendLiteral(\"&\");");
-				}
-				else
-				{
-					builder.WriteLine("handler.AppendLiteral(hasQueries ? \"&\" : \"?\");");
-				}
-				
-				builder.WriteLine("handler.AppendFormatted(key);");
-				builder.WriteLine("handler.AppendLiteral(\"=\");");
-				builder.WriteLine($"handler.AppendFormatted({ParseField("item.Value", genericTypes[1], query.Location)});");
-
-				if (!hasQueries)
-				{
-					builder.WriteLine();
-					builder.WriteLine("hasQueries = true;");
-				}
+				AppendQueryItem("item.Value", genericTypes[1]);
 			}
 			
 			builder.Indentation--;
@@ -511,54 +470,126 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			
 			return;
 		}
-
-		builder.WriteLine();
-		builder.WriteLine($"if ({query.Name} != null)");
-		builder.WriteLine('{');
-
-		if (hasQueries)
+		
+		if (query.Location.Location is HttpLocation.Raw && query.IsNullable)
 		{
-			builder.WriteLine($"\thandler.AppendLiteral(\"&{query.Location.Name}=\");");
-		}
-		else
-		{
-			if (queryCount > 1)
+			builder.WriteLine();
+			builder.WriteLine($"if ({query.Name} != null)");
+			builder.WriteLine('{');
+
+			if (hasQueries)
 			{
-				builder.WriteLine("\thandler.AppendLiteral(hasQueries ? \"&\" : \"?\");");
-				builder.WriteLine($"\thandler.AppendLiteral(\"{query.Location.Name}=\");");
+				builder.WriteLine("\thandler.AppendLiteral(\"&\");");
 			}
 			else
 			{
-				builder.WriteLine($"\thandler.AppendLiteral(\"?{query.Location.Name ?? query.Name}=\");");
+				builder.WriteLine("\thandler.AppendLiteral(hasQueries ? \"&\" : \"?\");");
+			}
+			
+			builder.WriteLine($"\thandler.AppendLiteral({query.Name});");
+			builder.WriteLine();
+			builder.WriteLine("\thasQueries = true;");
+			
+			builder.WriteLine('}');
+			
+			return;
+		}
+
+		
+		builder.WriteLine($"if ({query.Name} != null)");
+		builder.WriteLine('{');
+		
+		builder.Indentation++;
+
+		if (query.IsCollection)
+		{
+			builder.WriteLine($"foreach (var item in {query.Name})");
+			builder.WriteLine('{');
+			builder.Indentation++;
+
+			if (query.CollectionType.IsNullable)
+			{
+				AppendContinue("item");
+			}
+
+			if (hasQueries)
+			{
+				builder.WriteLine($"handler.AppendLiteral(\"&{query.Location.Name ?? query.Name}=\");");
+			}
+			else
+			{
+				builder.WriteLine("handler.AppendLiteral(hasQueries ? \"&\" : \"?\");");
+				builder.WriteLine($"handler.AppendLiteral(\"{query.Location.Name ?? query.Name}=\");");
+			}
+			
+			builder.WriteLine($"handler.AppendFormatted({ParseField("item", query.CollectionType, query.Location)});");
+			
+			builder.Indentation--;
+			builder.WriteLine('}');
+		}
+		else
+		{
+			if (hasQueries)
+			{
+				builder.WriteLine($"handler.AppendLiteral(\"&{query.Location.Name ?? query.Name}=\");");
+			}
+			else
+			{
+				if (queryCount > 1)
+				{
+					builder.WriteLine("handler.AppendLiteral(hasQueries ? \"&\" : \"?\");");
+					builder.WriteLine($"handler.AppendLiteral(\"{query.Location.Name ?? query.Name}=\");");
+				}
+				else
+				{
+					builder.WriteLine($"handler.AppendLiteral(\"?{query.Location.Name ?? query.Name}=\");");
+				}
+			}
+
+			builder.WriteLine($"handler.AppendFormatted({ParseField(query.Name, query.Namespace, query.Type, query.Location)});");
+
+			if (queryCount > 1)
+			{
+				builder.WriteLine();
+				builder.WriteLine("hasQueries = true;");
 			}
 		}
 
-		builder.WriteLine($"\thandler.AppendFormatted({ParseField(query.Name, query.Namespace, query.Type, query.Location)});");
+		builder.Indentation--;
+		builder.WriteLine('}');
+		
+		return;
 
-		//if (query.Location.UrlEncode)
-		//{
-		//	if (query is { Namespace: "System", Type: "String" or "string" })
-		//	{
-		//		builder.WriteLine($"\thandler.AppendFormatted(Uri.EscapeDataString({query.Name}));");
-		//	}
-		//	else
-		//	{
-		//		builder.WriteLine($"\thandler.AppendFormatted(Uri.EscapeDataString({query.Name}.ToString()));");
-		//	}
-		//}
-		//else
-		//{
-		//	builder.WriteLine($"\thandler.AppendFormatted({query.Name});");
-		//}
-
-		if (queryCount > 1)
+		void AppendContinue(string fieldName)
 		{
+			builder.WriteLine($"if ({fieldName} is null)");
+			builder.WriteLine('{');
+			builder.WriteLine("\tcontinue;");
+			builder.WriteLine('}');
 			builder.WriteLine();
-			builder.WriteLine("\thasQueries = true;");
 		}
 
+		void AppendQueryItem(string fieldItem, TypeModel? type)
+		{
+			if (hasQueries)
+			{
+				builder.WriteLine("handler.AppendLiteral(\"&\");");
+			}
+			else
+			{
+				builder.WriteLine("handler.AppendLiteral(hasQueries ? \"&\" : \"?\");");
+			}
+				
+			builder.WriteLine("handler.AppendFormatted(key);");
+			builder.WriteLine("handler.AppendLiteral(\"=\");");
+			builder.WriteLine($"handler.AppendFormatted({ParseField(fieldItem, type, query.Location)});");
 
-		builder.WriteLine('}');
+			if (!hasQueries)
+			{
+				builder.WriteLine();
+				builder.WriteLine("hasQueries = true;");
+			}
+		}
 	}
 
 	private static void WriteClassEnd(SourceWriter builder)
@@ -570,13 +601,13 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 	private static string ParsePath(string path, IEnumerable<IType> parameters)
 	{
-		var hasHoles = parameters.Any(a => a.Location.Location is HttpLocation.Path or HttpLocation.Query or HttpLocation.QueryMap);
+		var hasHoles = parameters.Any(a => a.Location.Location is HttpLocation.Path or HttpLocation.Query or HttpLocation.QueryMap or HttpLocation.Raw);
 
 		path = GetPath(path, parameters);
 
 		if (hasHoles)
 		{
-			if (parameters.Any(a => a.Location.Location == HttpLocation.Query && a.IsNullable || a.Location.Location == HttpLocation.QueryMap))
+			if (parameters.Any(a => a.Location.Location == HttpLocation.Query && a.IsNullable || a.Location.Location == HttpLocation.QueryMap || (a.Location.Location == HttpLocation.Raw && a.IsNullable)))
 			{
 				return $"CreatePath()";
 			}
@@ -599,8 +630,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			uriToBeAppended = uriToBeAppended.Slice(0, anchorIndex);
 		}
 
-		var queryIndex = uriToBeAppended.IndexOf('?');
-		var hasQuery = queryIndex != -1;
+		var hasQuery = uriToBeAppended.Contains(['?'], StringComparison.InvariantCulture);
 
 		var sb = new StringBuilder();
 		sb.Append(uriToBeAppended.ToString());
@@ -616,6 +646,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			sb.Append(Uri.EscapeDataString(parameter.Key));
 			sb.Append('=');
 			sb.Append(parameter.Value);
+			
 			hasQuery = true;
 		}
 
@@ -652,7 +683,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 	private static string GetPath(string path, IEnumerable<IType> parameters)
 	{
-		var hasHoles = parameters.Any(a => a.Location.Location is HttpLocation.Path or HttpLocation.Query);
+		var hasHoles = parameters.Any(a => a.Location.Location is HttpLocation.Path or HttpLocation.Query or HttpLocation.Raw);
 
 		if (hasHoles)
 		{
@@ -700,6 +731,15 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 				? $"{{{s.Name}}}"
 				: $"{{{s.Name}:{s.Location.Format}}}")));
 
+		var hasQuery = path.Contains('?');
+
+		foreach (var parameter in parameters.Where(w => w.Location.Location == HttpLocation.Raw && !w.IsNullable))
+		{
+			path += hasQuery ? "&" : "?";
+			path += '{' + parameter.Name + '}';
+			hasQuery = true;
+		}
+
 		return path;
 	}
 
@@ -734,7 +774,19 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			return $"Uri.EscapeDataString({fieldName})";
 		}
 
-		if (location.UrlEncode && !NeedsUrlEncode(@namespace, type))
+		if (HoleRegex.IsMatch(location.Format ?? String.Empty))
+		{
+			var result = $"$\"{FillHoles(location.Format, fieldName)}\"";
+
+			if (location.UrlEncode)
+			{
+				result = $"Uri.EscapeDataString({result})";
+			}
+			
+			return result;
+		}
+
+		if (location.UrlEncode && NeedsUrlEncode(@namespace, type))
 		{
 			var format = !String.IsNullOrEmpty(location.Format)
 				? $"\"{location.Format}\""
@@ -758,7 +810,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 	private static bool NeedsUrlEncode(string @namespace, string type)
 	{
-		return (@namespace is "System" &&
+		return !(@namespace is "System" &&
 		         type is "Int16" or "Int32" or "Int64" or "UInt16" or "UInt32" or "UInt64" or "Single" or "Double" or "Decimal" or "Boolean" or "Char");
 	}
 }
