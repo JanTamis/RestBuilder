@@ -5,15 +5,14 @@ using System.Threading.Tasks;
 namespace RestBuilder.Sample;
 
 [RestClient("Client")]
-[BaseAddress("https://api.example.com/")]
+// [BaseAddress("https://api.example.com/")]
 [Header("Authorization", "Bearer 123")]
 public partial class TestClient
 {
-	[Get("{username}/User")]
+	[Get("{username}/User?")]
 	[AllowAnyStatusCode]
 	public partial Task<string> GetUserAsync(
 		[Path("username")] string password,
-		[Query] List<string> name,
-		
+		[QueryMap] Dictionary<int, string> name,		
 		CancellationToken token);
 }

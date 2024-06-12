@@ -14,7 +14,7 @@ public record ParameterModel : IType
 
 	public bool IsCollection { get; set; }
 
-	public TypeModel? CollectionType { get; set; }
+	public TypeModel? CollectionItemType { get; set; }
 	
 	public bool IsNullable { get; set; }
 

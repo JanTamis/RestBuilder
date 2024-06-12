@@ -250,7 +250,7 @@ public static class Literals
 		""";
 
 
-	public const string QueryAttribute = $$"""
+	public const string QueryAttributes = $$"""
 		using System;
 
 		namespace {{BaseNamespace}};

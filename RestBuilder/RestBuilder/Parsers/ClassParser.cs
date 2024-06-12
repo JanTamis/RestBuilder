@@ -23,7 +23,8 @@ public static class ClassParser
 			.GetAttributes()
 			.Where(w => w.AttributeClass.Name == nameof(Literals.BaseAddressAttribute))
 			.Select(s => s.GetValue(0, String.Empty))
-			.FirstOrDefault()
+			.DefaultIfEmpty(String.Empty)
+			.First()
 			.TrimEnd('?', '&');
 
 		var source = new ClassModel
@@ -66,13 +67,10 @@ public static class ClassParser
 							IsNullable = x.Type.IsReferenceType,
 							Namespace = x.Type.ContainingNamespace?.ToString(),
 							Location = GetLocationAttribute(x.GetAttributes(), HttpLocation.Query),
-							GenericTypes = x.Type is INamedTypeSymbol { TypeArguments.Length: > 0 } namedTypeSymbol
-								? namedTypeSymbol.TypeArguments
-									.Select(GetTypeModel)
-									.ToImmutableEquatableArray()
-								: ImmutableEquatableArray<TypeModel>.Empty,
+							GenericTypes = GetGenericTypes(x.Type)
+									.ToImmutableEquatableArray(),
 							IsCollection = IsCollection(x.Type),
-							CollectionType = GetCollectionItemType(x.Type)
+							CollectionItemType = GetCollectionItemType(x.Type)
 						})
 						.ToImmutableEquatableArray(),
 					AllowAnyStatusCode = s.GetAttributes()
@@ -216,7 +214,7 @@ public static class ClassParser
 			{
 				Location = y.AttributeClass.Name switch
 				{
-					nameof(Literals.QueryAttribute) => HttpLocation.Query,
+					nameof(Literals.QueryAttributes) => HttpLocation.Query,
 					nameof(Literals.HeaderAttribute) => HttpLocation.Header,
 					nameof(Literals.PathAttribute) => HttpLocation.Path,
 					nameof(Literals.BodyAttribute) => HttpLocation.Body,
@@ -293,5 +291,23 @@ public static class ClassParser
 			CollectionType = GetCollectionItemType(type),
 			Type = ToName(type),
 		};
+	}
+
+	private static IEnumerable<TypeModel> GetGenericTypes(ITypeSymbol type)
+	{
+		foreach (var @interface in type.AllInterfaces)
+		{
+			if (@interface.ContainingNamespace?.ToString() == "System.Collections.Generic" && @interface.Name == "IDictionary")
+			{
+				return @interface.TypeArguments.Select(GetTypeModel);
+			}
+		}
+
+		if (type is INamedTypeSymbol { TypeArguments.Length: > 0 } namedTypeSymbol)
+		{
+			return namedTypeSymbol.TypeArguments.Select(GetTypeModel);
+		}
+
+		return Enumerable.Empty<TypeModel>();
 	}
 }

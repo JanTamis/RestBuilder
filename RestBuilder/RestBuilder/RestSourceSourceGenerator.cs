@@ -30,47 +30,47 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 	{
 		// Add the marker attribute to the compilation.
 		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
-			$"{Literals.BaseAddressAttribute}.g.cs",
+			$"{nameof(Literals.BaseAddressAttribute)}.g.cs",
 			SourceText.From(Literals.AttributeSourceCode, Encoding.UTF8)));
 
 		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
-			"RequestAttributes.g.cs",
+			$"{nameof(Literals.RequestAttributes)}.g.cs",
 			SourceText.From(Literals.RequestAttributes, Encoding.UTF8)));
 
 		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
-			"QueryAttributes.g.cs",
-			SourceText.From(Literals.QueryAttribute, Encoding.UTF8)));
+			$"{nameof(Literals.QueryAttributes)}.g.cs",
+			SourceText.From(Literals.QueryAttributes, Encoding.UTF8)));
 
 		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
-			"QuerySerializationMethod.g.cs",
+			$"{nameof(Literals.QuerySerializationMethod)}.g.cs",
 			SourceText.From(Literals.QuerySerializationMethod, Encoding.UTF8)));
 
 		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
-			"AllowAnyStatusCodeAttribute.g.cs",
+			$"{nameof(Literals.AllowAnyStatusCodeAttribute)}.g.cs",
 			SourceText.From(Literals.AllowAnyStatusCodeAttribute, Encoding.UTF8)));
 
 		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
-			"HeaderAttribute.g.cs",
+			$"{nameof(Literals.HeaderAttribute)}.g.cs",
 			SourceText.From(Literals.HeaderAttribute, Encoding.UTF8)));
 
 		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
-			"PathAttribute.g.cs",
+			$"{nameof(Literals.PathAttribute)}.g.cs",
 			SourceText.From(Literals.PathAttribute, Encoding.UTF8)));
 
 		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
-			"BodyAttribute.g.cs",
+			$"{nameof(Literals.BodyAttribute)}.g.cs",
 			SourceText.From(Literals.BodyAttribute, Encoding.UTF8)));
 
 		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
-			"RestClientAttribute.g.cs",
+			$"{nameof(Literals.RestClientAttribute)}.g.cs",
 			SourceText.From(Literals.RestClientAttribute, Encoding.UTF8)));
 
 		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
-			"QueryMapAttribute.g.cs",
+			$"{nameof(Literals.QueryMapAttribute)}.g.cs",
 			SourceText.From(Literals.QueryMapAttribute, Encoding.UTF8)));
 		
 		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
-			"RawQueryStringAttribute.g.cs",
+			$"{nameof(Literals.RawQueryStringAttribute)}.g.cs",
 			SourceText.From(Literals.RawQueryStringAttribute, Encoding.UTF8)));
 
 		var classes = context.SyntaxProvider
@@ -322,7 +322,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			result = $"$\"{FillHoles(header.Location.Format, header.Name)}\"";
 		}
 
-		builder.WriteLine($"request.Headers.Add(\"{header.Location.Name}\", {result});");
+		builder.WriteLine($"request.Headers.Add(\"{header.Location.Name ?? header.Name}\", {result});");
 	}
 
 	private static void WriteNullableHeader(IType header, SourceWriter builder)
@@ -522,7 +522,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			builder.WriteLine('{');
 			builder.Indentation++;
 
-			if (query.CollectionType.IsNullable)
+			if (query.CollectionItemType.IsNullable)
 			{
 				AppendContinue("item");
 			}
@@ -537,38 +537,13 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 				builder.WriteLine($"handler.AppendLiteral(\"{query.Location.Name ?? query.Name}=\");");
 			}
 			
-			builder.WriteLine($"handler.AppendFormatted({ParseField("item", query.CollectionType, query.Location)});");
+			builder.WriteLine($"handler.AppendFormatted({ParseField("item", query.CollectionItemType, query.Location)});");
 			
 			builder.Indentation--;
 			builder.WriteLine('}');
 		}
 		else
 		{
-			//if (hasQueries)
-			//{
-			//	builder.WriteLine($"handler.AppendLiteral(\"&{query.Location.Name ?? query.Name}=\");");
-			//}
-			//else
-			//{
-			//	if (queryCount > 1)
-			//	{
-			//		if (isFirst)
-			//		{
-			//			builder.WriteLine("handler.AppendLiteral(\"?\");");
-			//		}
-			//		else
-			//		{
-			//			builder.WriteLine("handler.AppendLiteral(hasQueries ? \"&\" : \"?\");");
-			//		}
-
-			//		builder.WriteLine($"handler.AppendLiteral(\"{query.Location.Name ?? query.Name}=\");");
-			//	}
-			//	else
-			//	{
-			//		builder.WriteLine($"handler.AppendLiteral(\"?{query.Location.Name ?? query.Name}=\");");
-			//	}
-			//}
-
 			if (hasQueries)
 			{
 				builder.WriteLine($"handler.AppendLiteral(\"&{query.Location.Name ?? query.Name}=\");");
