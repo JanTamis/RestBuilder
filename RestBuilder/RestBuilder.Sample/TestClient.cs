@@ -13,6 +13,6 @@ public partial class TestClient
 	[AllowAnyStatusCode]
 	public partial Task<string> GetUserAsync(
 		[Path("username")] string password,
-		[QueryMap] Dictionary<int, string> name,		
+		[QueryMap] Dictionary<string, int> name,		
 		CancellationToken token);
 }
