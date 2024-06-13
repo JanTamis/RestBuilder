@@ -1,3 +1,4 @@
+using Microsoft.CodeAnalysis;
 using RestBuilder.Interfaces;
 using TypeShape.Roslyn;
 
@@ -17,6 +18,8 @@ public record ParameterModel : IType
 	public TypeModel? CollectionItemType { get; set; }
 	
 	public bool IsNullable { get; set; }
+
+	public NullableAnnotation NullableAnnotation { get; set; }
 
 	public ImmutableEquatableArray<TypeModel> GenericTypes { get; set; }
 }

@@ -65,7 +65,8 @@ public static class ClassParser
 							Name = x.Name,
 							Type = ToName(x.Type),
 							IsNullable = x.Type.IsReferenceType,
-							Namespace = x.Type.ContainingNamespace?.ToString(),
+							NullableAnnotation = x.NullableAnnotation,
+							Namespace = x.Type.ContainingNamespace?.ToString() ?? String.Empty,
 							Location = GetLocationAttribute(x.GetAttributes(), HttpLocation.Query),
 							GenericTypes = GetGenericTypes(x.Type)
 									.ToImmutableEquatableArray(),
@@ -85,6 +86,7 @@ public static class ClassParser
 				.Select(s => new PropertyModel
 				{
 					IsNullable = s.Type.IsReferenceType,
+					NullableAnnotation = s.NullableAnnotation,
 					Name = s.Name,
 					Namespace = s.Type.ContainingNamespace?.ToString(),
 					Type = ToName(s.Type),
@@ -286,6 +288,7 @@ public static class ClassParser
 		{
 			Name = type.Name,
 			IsNullable = type.IsReferenceType,
+			NullableAnnotation = type.NullableAnnotation,
 			IsCollection = IsCollection(type),
 			Namespace = type.ContainingNamespace?.ToString(),
 			CollectionType = GetCollectionItemType(type),

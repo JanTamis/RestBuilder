@@ -1,3 +1,4 @@
+using Microsoft.CodeAnalysis;
 using RestBuilder.Interfaces;
 
 namespace RestBuilder.Models;
@@ -12,4 +13,6 @@ public record PropertyModel : IType
 	public LocationAttributeModel Location { get; set; }
 
 	public bool IsNullable { get; set; }
+
+	public NullableAnnotation NullableAnnotation { get; set; }
 }

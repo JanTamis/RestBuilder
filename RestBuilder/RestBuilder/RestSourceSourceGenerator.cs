@@ -111,6 +111,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 				"System",
 				"System.Net.Http",
 				"System.Net.Http.Json",
+				"System.Net.Http.Headers",
 				"System.Threading",
 				"System.Threading.Tasks",
 				"System.Runtime.CompilerServices"
@@ -174,15 +175,24 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 	{
 		builder.Indentation = 2;
 
-		builder.WriteLine("DefaultRequestHeaders = ");
-		builder.WriteLine('{');
-
-		foreach (var header in source.Attributes.Where(w => w.Location == HttpLocation.Header))
+		using (builder.AppendIndentation("DefaultRequestHeaders = "))
 		{
-			builder.WriteLine($"\t{{ \"{header.Name}\", \"{header.Value}\" }},");
-		}
+			foreach (var header in source.Attributes.Where(w => w.Location == HttpLocation.Header))
+			{
+				if (header.Name is "Authorization")
+				{
+					var arguments = header.Value.Split([' '], StringSplitOptions.RemoveEmptyEntries)
+						.Select(s => $"\"{s}\"")
+						.Take(2);
 
-		builder.WriteLine('}');
+					builder.WriteLine($"Authorization = new AuthenticationHeaderValue({String.Join(", ", arguments)}),");
+				}
+				else
+				{
+					builder.WriteLine($"{{ \"{header.Name}\", \"{header.Value}\" }},");
+				}
+			}
+		}
 
 		builder.Indentation = 0;
 	}
@@ -216,17 +226,13 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 		builder.Indentation++;
 
-		builder.WriteLine($"public partial async {returnType} {method.Name}({String.Join(", ", method.Parameters.Select(s => $"{s.Type} {s.Name}"))})");
-		builder.WriteLine('{');
-		builder.Indentation++;
+		using (builder.AppendIndentation($"public partial async {returnType} {method.Name}({String.Join(", ", method.Parameters.Select(s => $"{s.Type} {s.Name}"))})"))
+		{
+			var items = method.Parameters
+				.Concat<IType>(source.Properties);
 
-		var items = method.Parameters
-			.Concat<IType>(source.Properties);
-
-		WriteMethodBody(method, source.ClientName, items, tokenText, builder);
-
-		builder.Indentation--;
-		builder.WriteLine('}');
+			WriteMethodBody(method, source.ClientName, items, tokenText, builder);
+		}
 	}
 
 	private static void WriteMethodBody(MethodModel method, string clientName, IEnumerable<IType> items, string tokenText, SourceWriter builder)
@@ -234,10 +240,24 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		var headers = items
 			.Where(w => w.Location.Location == HttpLocation.Header)
 			.DistinctBy(d => d.Location.Name ?? d.Name)
-			.ToLookup(g => g.IsNullable && String.IsNullOrEmpty(g.Location.Format));
+			.ToLookup(g => g.IsNullable && g.NullableAnnotation == NullableAnnotation.Annotated && String.IsNullOrEmpty(g.Location.Format));
+
+		var requiredParameters = items
+			.Where(w => w.IsNullable && w.NullableAnnotation == NullableAnnotation.NotAnnotated)
+			.ToList();
 
 		var bodies = items
 			.Where(w => w.Location.Location == HttpLocation.Body);
+
+		if (requiredParameters.Any())
+		{
+			foreach (var parameter in requiredParameters)
+			{
+				builder.WriteLine($"ArgumentNullException.ThrowIfNull({parameter.Name});");
+			}
+
+			builder.WriteLine();
+		}
 
 		if (!headers.Any() && !bodies.Any())
 		{
@@ -251,7 +271,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		WriteMethodReturn(method, tokenText, builder);
 
 		var optionalQueries = items
-			.Where(w => w.Location.Location == HttpLocation.Query && w.IsNullable || w.Location.Location == HttpLocation.QueryMap || (w.Location.Location == HttpLocation.Raw && w.IsNullable))
+			.Where(w => w.Location.Location == HttpLocation.Query && (w.IsNullable && w.NullableAnnotation == NullableAnnotation.Annotated) || w.Location.Location == HttpLocation.QueryMap || (w.Location.Location == HttpLocation.Raw && w.IsNullable))
 			.ToList();
 
 		if (optionalQueries.Any())
@@ -343,10 +363,11 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		}
 
 		builder.WriteLine();
-		builder.WriteLine($"if ({header.Name} != null)");
-		builder.WriteLine('{');
-		builder.WriteLine($"\trequest.Headers.Add(\"{header.Location.Name}\", {result});");
-		builder.WriteLine('}');
+
+		using (builder.AppendIndentation($"if ({header.Name} is not null)"))
+		{
+			builder.WriteLine($"request.Headers.Add(\"{header.Location.Name}\", {result});");
+		}
 	}
 
 	private static void WriteMethodReturn(MethodModel method, string tokenText, SourceWriter builder)
@@ -394,31 +415,26 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		var hasQueries = method.Path.Contains("?");
 
 		builder.WriteLine();
-		builder.WriteLine("string CreatePath()");
-		builder.WriteLine('{');
-		builder.Indentation++;
 
-		var hasVariable = !hasQueries && ((optionalQueries.Count > 1 || optionalQueries[0].Location.Location == HttpLocation.QueryMap) || optionalQueries.Any(a => a is ParameterModel { IsCollection: true }));
-
-		builder.WriteLine($"DefaultInterpolatedStringHandler handler = $\"{GetPath(method.Path, method.Parameters)}\";");
-
-		if (hasVariable)
+		using (builder.AppendIndentation("string CreatePath()"))
 		{
-			builder.WriteLine("var hasQueries = false;");
+			var hasVariable = !hasQueries && ((optionalQueries.Count > 1 || optionalQueries[0].Location.Location == HttpLocation.QueryMap) || optionalQueries.Any(a => a is ParameterModel { IsCollection: true }));
+
+			builder.WriteLine($"DefaultInterpolatedStringHandler handler = $\"{GetPath(method.Path, method.Parameters)}\";");
+
+			if (hasVariable)
+			{
+				builder.WriteLine("var hasQueries = false;");
+			}
+
+			for (int i = 0; i < optionalQueries.Count; i++)
+			{
+				WriteOptionalQuery(optionalQueries[i] as ParameterModel, hasQueries, hasVariable, i == 0, optionalQueries.Count, builder);
+			}
+
+			builder.WriteLine();
+			builder.WriteLine("return handler.ToStringAndClear();");
 		}
-
-		// builder.WriteLine();
-
-		for (int i = 0; i < optionalQueries.Count; i++)
-		{
-			WriteOptionalQuery(optionalQueries[i] as ParameterModel, hasQueries, hasVariable, i == 0, optionalQueries.Count, builder);
-		}
-
-		builder.WriteLine();
-		builder.WriteLine("return handler.ToStringAndClear();");
-
-		builder.Indentation--;
-		builder.WriteLine('}');
 	}
 
 	private static void WriteOptionalQuery(ParameterModel query, bool hasQueries, bool hasVariable, bool isFirst, int queryCount, SourceWriter builder)
@@ -426,12 +442,20 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		if (query.Location is { Location: HttpLocation.QueryMap } && query is { GenericTypes: { Length: 2 } genericTypes })
 		{
 			builder.WriteLine();
+
+			if (query.IsNullable && query.NullableAnnotation == NullableAnnotation.Annotated)
+			{
+				builder.WriteLine($"if ({query.Name} != null)");
+				builder.WriteLine('{');
+				builder.Indentation++;
+			}
+
 			builder.WriteLine($"foreach (var item in {query.Name})");
 			builder.WriteLine('{');
 			
 			builder.Indentation++;
 
-			if (!genericTypes[1].IsCollection && genericTypes[1].IsNullable)
+			if (genericTypes[1] is { IsCollection: false, IsNullable: true, NullableAnnotation: NullableAnnotation.Annotated })
 			{
 				AppendContinue("item.Value");
 			}
@@ -441,7 +465,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			
 			if (genericTypes[1].IsCollection)
 			{
-				if (genericTypes[1].IsNullable)
+				if (genericTypes[1] is { IsNullable: true, NullableAnnotation: NullableAnnotation.Annotated })
 				{
 					AppendContinue("item.Value");
 				}
@@ -451,7 +475,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 				builder.Indentation++;
 
-				if (genericTypes[1].CollectionType.IsNullable)
+				if (genericTypes[1].CollectionType is { IsNullable: true, NullableAnnotation: NullableAnnotation.Annotated })
 				{
 					AppendContinue("value");
 				}
@@ -466,7 +490,13 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			{
 				AppendQueryItem("item.Value", genericTypes[1]);
 			}
-			
+
+			if (query.IsNullable && query.NullableAnnotation == NullableAnnotation.Annotated)
+			{
+				builder.Indentation--;
+				builder.WriteLine('}');
+			}
+
 			builder.Indentation--;
 
 			builder.WriteLine('}');
@@ -477,8 +507,14 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		if (query.Location.Location is HttpLocation.Raw && query.IsNullable)
 		{
 			builder.WriteLine();
-			builder.WriteLine($"if ({query.Name} != null)");
-			builder.WriteLine('{');
+
+			if (query.IsNullable && query.NullableAnnotation == NullableAnnotation.Annotated)
+			{
+				builder.WriteLine($"if ({query.Name} != null)");
+				builder.WriteLine('{');
+			}
+			
+			
 
 			if (hasQueries)
 			{
@@ -504,16 +540,23 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 				builder.WriteLine();
 				builder.WriteLine("\thasQueries = true;");
 			}
-			
-			builder.WriteLine('}');
-			
+
+			if (query.IsNullable && query.NullableAnnotation == NullableAnnotation.Annotated)
+			{
+				builder.WriteLine('}');
+			}
+
 			return;
 		}
 
 		builder.WriteLine();
-		builder.WriteLine($"if ({query.Name} != null)");
-		builder.WriteLine('{');
-		
+
+		if (query.IsNullable && query.NullableAnnotation == NullableAnnotation.Annotated)
+		{
+			builder.WriteLine($"if ({query.Name} != null)");
+			builder.WriteLine('{');
+		}
+
 		builder.Indentation++;
 
 		if (query.IsCollection)
@@ -522,7 +565,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			builder.WriteLine('{');
 			builder.Indentation++;
 
-			if (query.CollectionItemType.IsNullable)
+			if (query.CollectionItemType.IsNullable && query.CollectionItemType.NullableAnnotation == NullableAnnotation.Annotated)
 			{
 				AppendContinue("item");
 			}
@@ -540,7 +583,11 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			builder.WriteLine($"handler.AppendFormatted({ParseField("item", query.CollectionItemType, query.Location)});");
 			
 			builder.Indentation--;
-			builder.WriteLine('}');
+
+			if (query.IsNullable && query.NullableAnnotation == NullableAnnotation.Annotated)
+			{
+				builder.WriteLine('}');
+			}
 		}
 		else
 		{
@@ -577,10 +624,11 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 		void AppendContinue(string fieldName)
 		{
-			builder.WriteLine($"if ({fieldName} is null)");
-			builder.WriteLine('{');
-			builder.WriteLine("\tcontinue;");
-			builder.WriteLine('}');
+			using (builder.AppendIndentation($"if ({fieldName} is null)"))
+			{
+				builder.WriteLine("continue");
+			}
+
 			builder.WriteLine();
 		}
 
@@ -622,7 +670,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 		if (hasHoles)
 		{
-			if (parameters.Any(a => a.Location.Location == HttpLocation.Query && a.IsNullable || a.Location.Location == HttpLocation.QueryMap || (a.Location.Location == HttpLocation.Raw && a.IsNullable)))
+			if (parameters.Any(a => a.Location.Location == HttpLocation.Query && (a.IsNullable && a.NullableAnnotation == NullableAnnotation.Annotated) || a.Location.Location == HttpLocation.QueryMap || (a.Location.Location == HttpLocation.Raw && a.IsNullable)))
 			{
 				return $"CreatePath()";
 			}
@@ -715,8 +763,8 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			{
 				resultPath.Append(path
 					.Substring(index, match.Index - index)
-					.Replace("{", "{{")
-					.Replace("}", "}}"));
+					.Replace("{", "%7B")
+					.Replace("}", "%7D"));
 
 				if (pathHoles.TryGetValue(match.Value.Substring(1, match.Value.Length - 2), out var parameter))
 				{
@@ -725,8 +773,8 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 				else
 				{
 					resultPath.Append(match.Value
-						.Replace("{", "{{")
-						.Replace("}", "}}"));
+						.Replace("{", "%7B")
+						.Replace("}", "%7D"));
 				}
 
 				index = match.Index + match.Length;
@@ -734,17 +782,15 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 			resultPath.Append(path
 				.Substring(index)
-				.Replace("{", "{{")
-				.Replace("}", "}}"));
+				.Replace("{", "%7B")
+				.Replace("}", "%7D"));
 
 			path = resultPath.ToString();
 		}
 
 		path = AddQueryString(path, parameters
-			.Where(w => w.Location.Location == HttpLocation.Query && !w.IsNullable)
-			.Select(s => new KeyValuePair<string, string>(s.Location.Name ?? s.Name, String.IsNullOrEmpty(s.Location.Format)
-				? $"{{{s.Name}}}"
-				: $"{{{s.Name}:{s.Location.Format}}}")));
+			.Where(w => w.Location.Location == HttpLocation.Query && (!w.IsNullable || w.NullableAnnotation == NullableAnnotation.NotAnnotated))
+			.Select(s => new KeyValuePair<string, string>(s.Location.Name ?? s.Name, "{" + ParseFieldInline(s.Name, s.Namespace, s.Type, s.Location) + "}")));
 
 		var hasQuery = path.Contains('?');
 
@@ -818,6 +864,47 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			}
 
 			return $"{fieldName}.ToString(\"{location.Format}\")";
+		}
+
+		return $"{fieldName}";
+	}
+
+	private static string ParseFieldInline(string fieldName, string @namespace, string type, LocationAttributeModel location)
+	{
+		if (@namespace == "System" && type is "String" or "string" && location.UrlEncode)
+		{
+			return $"Uri.EscapeDataString({fieldName})";
+		}
+
+		if (HoleRegex.IsMatch(location.Format ?? String.Empty))
+		{
+			var result = $"$\"{FillHoles(location.Format!, fieldName)}\"";
+
+			if (location.UrlEncode)
+			{
+				result = $"Uri.EscapeDataString({result})";
+			}
+
+			return result;
+		}
+
+		if (location.UrlEncode && NeedsUrlEncode(@namespace, type))
+		{
+			var format = !String.IsNullOrEmpty(location.Format)
+				? $"\"{location.Format}\""
+				: String.Empty;
+
+			return $"Uri.EscapeDataString({fieldName}.ToString({format}))";
+		}
+
+		if (!String.IsNullOrEmpty(location.Format))
+		{
+			if (location.UrlEncode)
+			{
+				return $"Uri.EscapeDataString({fieldName}.ToString(\"{location.Format}\"))";
+			}
+
+			return $"{fieldName}:{location.Format}";
 		}
 
 		return $"{fieldName}";

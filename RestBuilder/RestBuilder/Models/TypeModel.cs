@@ -1,3 +1,4 @@
+using Microsoft.CodeAnalysis;
 using RestBuilder.Interfaces;
 
 namespace RestBuilder.Models;
@@ -9,6 +10,9 @@ public record TypeModel
 	public string Namespace { get; set; }
 	
 	public bool IsNullable { get; set; }
+
+	public NullableAnnotation NullableAnnotation { get; set; }
+
 	public bool IsCollection { get; set; }
 	
 	public TypeModel? CollectionType { get; set; }

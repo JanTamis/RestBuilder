@@ -1,3 +1,4 @@
+using Microsoft.CodeAnalysis;
 using RestBuilder.Models;
 
 namespace RestBuilder.Interfaces;
@@ -10,6 +11,8 @@ public interface IType
 	string Namespace { get; set; }
 
 	LocationAttributeModel Location { get; set; }
+
+	NullableAnnotation NullableAnnotation { get; set; }
 
 	bool IsNullable { get; set; }
 }
