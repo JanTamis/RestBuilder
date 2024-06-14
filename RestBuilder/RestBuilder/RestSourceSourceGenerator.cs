@@ -462,17 +462,17 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 			if (genericTypes[1].IsCollection)
 			{
-				if (query.Location.UrlEncode)
-				{
-					builder.WriteLine($"var key = {ParseField("item.Key", genericTypes[0], query.Location)};");
-					builder.WriteLine();
-				}
-				
 				if (genericTypes[1] is { IsNullable: true, NullableAnnotation: NullableAnnotation.Annotated })
 				{
 					AppendContinue("item.Value");
 				}
 
+				if (query.Location.UrlEncode && NeedsUrlEncode(genericTypes[0].Namespace, genericTypes[0].Type))
+				{
+					builder.WriteLine($"var key = {ParseField("item.Key", genericTypes[0], query.Location)};");
+					builder.WriteLine();
+				}
+				
 				builder.WriteLine("foreach (var value in item.Value)");
 				builder.WriteLine('{');
 
@@ -483,7 +483,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 					AppendContinue("value");
 				}
 
-				if (query.Location.UrlEncode)
+				if (query.Location.UrlEncode && NeedsUrlEncode(genericTypes[0].Namespace, genericTypes[0].Type))
 				{
 					AppendQueryItem("value", "key", genericTypes[1].CollectionType);
 				}
@@ -634,7 +634,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		{
 			using (builder.AppendIndentation($"if ({fieldName} is null)"))
 			{
-				builder.WriteLine("continue");
+				builder.WriteLine("continue;");
 			}
 
 			builder.WriteLine();
@@ -951,6 +951,6 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 	private static bool NeedsUrlEncode(string @namespace, string type)
 	{
 		return !(@namespace is "System" &&
-		         type is "Int16" or "Int32" or "Int64" or "UInt16" or "UInt32" or "UInt64" or "Single" or "Double" or "Decimal" or "Boolean" or "Char");
+		         type is "Int16" or "short" or "Int32" or "int" or "Int64" or "long" or "UInt16" or "ushort" or "UInt32" or "uint" or "UInt64" or "ulong" or "Single" or "Double" or "Decimal" or "Boolean" or "Char");
 	}
 }
