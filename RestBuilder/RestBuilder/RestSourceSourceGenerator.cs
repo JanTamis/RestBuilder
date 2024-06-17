@@ -75,6 +75,14 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 	$"{nameof(Literals.RequestModifierAttribute)}.g.cs",
 			SourceText.From(Literals.RequestModifierAttribute, Encoding.UTF8)));
 
+		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
+			$"{nameof(Literals.ResponseDeserializerAttribute)}.g.cs",
+			SourceText.From(Literals.ResponseDeserializerAttribute, Encoding.UTF8)));
+
+		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
+			$"{nameof(Literals.RequestBodySerializerAttribute)}.g.cs",
+			SourceText.From(Literals.RequestBodySerializerAttribute, Encoding.UTF8)));
+
 		var classes = context.SyntaxProvider
 			.ForAttributeWithMetadataName(
 				$"{Literals.BaseNamespace}.{nameof(Literals.RestClientAttribute)}",
@@ -237,11 +245,11 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			var items = method.Parameters
 				.Concat<IType>(source.Properties);
 
-			WriteMethodBody(method, source.ClientName, items, source.RequestModifiers, tokenText, builder);
+			WriteMethodBody(method, source.ClientName, items, source, tokenText, builder);
 		}
 	}
 
-	private static void WriteMethodBody(MethodModel method, string clientName, IEnumerable<IType> items, ImmutableEquatableArray<RequestModifierModel> requestModifiers, string tokenText, SourceWriter builder)
+	private static void WriteMethodBody(MethodModel method, string clientName, IEnumerable<IType> items, ClassModel classModel, string tokenText, SourceWriter builder)
 	{
 		var headers = items
 			.Where(w => w.Location.Location == HttpLocation.Header)
@@ -268,16 +276,16 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			builder.WriteLine();
 		}
 
-		if (!headers.Any() && !bodies.Any() && !methodDefaultItems.Any() && requestModifiers.Length == 0)
+		if (!headers.Any() && !bodies.Any() && !methodDefaultItems.Any() && classModel.RequestModifiers.Length == 0)
 		{
 			WriteMethodBodyWithoutHeaders(method, clientName, items, tokenText, builder);
 		}
 		else
 		{
-			WriteMethodBodyWithHeaders(method, clientName, items, tokenText, headers, methodDefaultItems.ToDictionary(t => t.Name, t => t), bodies.FirstOrDefault(), requestModifiers, builder);
+			WriteMethodBodyWithHeaders(method, clientName, items, tokenText, headers, methodDefaultItems.ToDictionary(t => t.Name, t => t), bodies.FirstOrDefault(), classModel, builder);
 		}
 
-		WriteMethodReturn(method, tokenText, builder);
+		WriteMethodReturn(method, classModel.ResponseDeserializer, tokenText, builder);
 
 		var optionalQueries = items
 			.Where(w => w.Location.Location == HttpLocation.Query && w is { IsNullable: true, NullableAnnotation: NullableAnnotation.Annotated } || w.Location.Location == HttpLocation.QueryMap || (w.Location.Location == HttpLocation.Raw && w.IsNullable))
@@ -301,7 +309,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		}
 	}
 
-	private static void WriteMethodBodyWithHeaders(MethodModel method, string clientName, IEnumerable<IType> items, string tokenText, ILookup<bool, IType> headers, Dictionary<string, LocationAttributeModel> defaultItems, IType? body, ImmutableEquatableArray<RequestModifierModel> requestModifiers, SourceWriter builder)
+	private static void WriteMethodBodyWithHeaders(MethodModel method, string clientName, IEnumerable<IType> items, string tokenText, ILookup<bool, IType> headers, Dictionary<string, LocationAttributeModel> defaultItems, IType? body, ClassModel classModel, SourceWriter builder)
 	{
 		builder.WriteLine($"using var request = new HttpRequestMessage(HttpMethod.{method.Method?.Method ?? "Get"}, {ParsePath(method.Path, items)});");
 
@@ -333,14 +341,14 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		if (body != null)
 		{
 			builder.WriteLine();
-			WriteRequestBody(body, builder);
+			WriteRequestBody(body, classModel, tokenText, builder);
 		}
 
 		builder.WriteLine();
 
-		if (requestModifiers.Length > 0)
+		if (classModel.RequestModifiers.Length > 0)
 		{
-			foreach (var requestModifier in requestModifiers)
+			foreach (var requestModifier in classModel.RequestModifiers)
 			{
 				var awaitPrefix = requestModifier.IsAsync
 					? "await "
@@ -430,7 +438,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		}
 	}
 
-	private static void WriteMethodReturn(MethodModel method, string tokenText, SourceWriter builder)
+	private static void WriteMethodReturn(MethodModel method, ResponseDeserializerModel? responseDeserializer, string tokenText, SourceWriter builder)
 	{
 		if (!method.AllowAnyStatusCode)
 		{
@@ -462,7 +470,23 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 				if (!String.IsNullOrEmpty(method.ReturnType))
 				{
 					builder.WriteLine();
-					builder.WriteLine($"return await response.Content.ReadFromJsonAsync<{method.ReturnType}>({tokenText});");
+					
+					if (responseDeserializer is not null)
+					{
+						var awaitPrefix = responseDeserializer.IsAsync
+							? "await "
+							: String.Empty;
+						
+						var cancellationTokenSuffix = responseDeserializer.HasCancellation
+							? $", {tokenText}"
+							: String.Empty;
+						
+						builder.WriteLine($"return {awaitPrefix}{responseDeserializer.Name}<{method.ReturnType}>(response{cancellationTokenSuffix});");
+					}
+					else
+					{
+						builder.WriteLine($"return await response.Content.ReadFromJsonAsync<{method.ReturnType}>({tokenText});");
+					}
 				}
 
 				break;
@@ -487,7 +511,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 				builder.WriteLine("var hasQueries = false;");
 			}
 
-			for (int i = 0; i < optionalQueries.Count; i++)
+			for (var i = 0; i < optionalQueries.Count; i++)
 			{
 				WriteOptionalQuery(optionalQueries[i] as ParameterModel, hasQueries, hasVariable, i == 0, optionalQueries.Count, builder);
 			}
@@ -881,7 +905,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		return path;
 	}
 
-	private static void WriteRequestBody(IType body, SourceWriter builder)
+	private static void WriteRequestBody(IType body, ClassModel classModel, string tokenText, SourceWriter builder)
 	{
 		switch (body)
 		{
@@ -895,7 +919,23 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 				builder.WriteLine($"request.Content = new StreamContent({body.Name});");
 				break;
 			default:
-				builder.WriteLine($"request.Content = JsonContent.Create({body.Name});");
+				if (classModel.RequestBodySerializer is not null)
+				{
+					var awaitPrefix = classModel.RequestBodySerializer.IsAsync
+						? "await "
+						: String.Empty;
+
+					var cancellationTokenSuffix = classModel.RequestBodySerializer.HasCancellation
+						? $", {tokenText}"
+						: String.Empty;
+
+					builder.WriteLine($"request.Content = {awaitPrefix}{classModel.RequestBodySerializer.Name}({body.Name}{cancellationTokenSuffix});");
+				}
+				else
+				{
+					builder.WriteLine($"request.Content = JsonContent.Create({body.Name});");
+				}
+				
 				break;
 		}
 	}

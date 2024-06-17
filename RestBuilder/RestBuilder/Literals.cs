@@ -382,7 +382,7 @@ public static class Literals
 		/// <summary>
 		/// Controls whether the given method, or all methods within the given interface, will throw an exception if the response status code does not indicate success
 		/// </summary>
-		[AttributeUsage(AttributeTargets.Interface | AttributeTargets.Method, Inherited = false, AllowMultiple = false)]
+		[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, Inherited = false, AllowMultiple = false)]
 		public sealed class AllowAnyStatusCodeAttribute : Attribute
 		{
 			/// <summary>
@@ -743,6 +743,34 @@ public static class Literals
 			{
 				Order = 0;
 			}
+		}
+		""";
+
+	public const string ResponseDeserializerAttribute = $$"""
+		using System;
+
+		namespace {{BaseNamespace}};
+
+		/// <summary>
+		/// Marks a method which is used to deserialize the response
+		/// </summary>
+		[AttributeUsage(AttributeTargets.Method, Inherited = false, AllowMultiple = false)]
+		public class ResponseDeserializerAttribute : Attribute
+		{
+		}
+		""";
+
+	public const string RequestBodySerializerAttribute = $$"""
+		using System;
+
+		namespace {{BaseNamespace}};
+
+		/// <summary>
+		/// Marks a method which is used to process the request body
+		/// </summary>
+		[AttributeUsage(AttributeTargets.Method, Inherited = false, AllowMultiple = false)]
+		public class RequestBodySerializerAttribute : Attribute
+		{
 		}
 		""";
 }

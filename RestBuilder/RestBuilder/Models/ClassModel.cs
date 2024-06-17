@@ -13,6 +13,9 @@ public record ClassModel
 	
 	public bool IsStatic { get; set; }
 	public bool IsDisposable { get; set; }
+
+	public ResponseDeserializerModel? ResponseDeserializer { get; set; }
+	public RequestBodySerializerModel? RequestBodySerializer { get; set; }
 	
 	public ImmutableEquatableArray<MethodModel> Methods { get; set; }
 	public ImmutableEquatableArray<PropertyModel> Properties { get; set; }

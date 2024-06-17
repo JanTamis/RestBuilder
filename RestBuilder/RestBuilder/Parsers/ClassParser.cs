@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Net.Http;
+using System.Runtime.InteropServices.ComTypes;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
@@ -22,19 +23,22 @@ public static class ClassParser
 	{
 		var namespaceName = classSymbol.ContainingNamespace.ToDisplayString();
 		var className = classDeclaration!.Identifier.Text;
-		
+
 		var baseAddress = classSymbol
-			.GetAttributes()
-			.Where(w => w.AttributeClass.Name == nameof(Literals.BaseAddressAttribute))
+			.GetAttributes(nameof(Literals.BaseAddressAttribute))
 			.Select(s => s.GetValue(0, String.Empty))
 			.DefaultIfEmpty(String.Empty)
 			.First()
 			.TrimEnd('?', '&');
 
 		var clientName = classSymbol
-			.GetAttributes()
-			.Where(w => w.AttributeClass.Name == nameof(Literals.RestClientAttribute))
+			.GetAttributes(nameof(Literals.RestClientAttribute))
 			.Select(s => s.GetValue(0, String.Empty))
+			.FirstOrDefault();
+
+		var allowAnyStatusCode = classSymbol
+			.GetAttributes("AllowAnyStatusCodeAttribute")
+			.Select(x => x.GetValue(0, true))
 			.FirstOrDefault();
 
 		var source = new ClassModel
@@ -43,23 +47,48 @@ public static class ClassParser
 			Namespace = namespaceName,
 			IsStatic = classDeclaration.Modifiers.Any(SyntaxKind.StaticKeyword),
 			IsDisposable = classSymbol.AllInterfaces.Any(a => a.IsType<IDisposable>()) &&
-				!classSymbol
-					.GetMembers()
-					.OfType<IMethodSymbol>()
-					.Any(a => !a.IsPartialDefinition && a.ReturnsVoid && a.Parameters.IsEmpty && a.Name == nameof(IDisposable.Dispose)),
+			               !classSymbol
+				               .GetMembers()
+				               .OfType<IMethodSymbol>()
+				               .Any(a => !a.IsPartialDefinition && a is { ReturnsVoid: true, Parameters.IsEmpty: true, Name: nameof(IDisposable.Dispose) }),
 			ClientName = clientName,
 			NeedsClient = !classSymbol
 				.GetMembers()
-				.Any(w => w.Name == clientName && (w is IFieldSymbol field && field.Type.IsType<HttpClient>() ||
-					w is IPropertySymbol propery && propery.Type.IsType<HttpClient>())),
-			RequestModifiers = classSymbol
-			.GetMembers()
+				.Any(w => w.Name == clientName && (w is IFieldSymbol field && field.Type.IsType<HttpClient>() || w is IPropertySymbol propery && propery.Type.IsType<HttpClient>())),
+			ResponseDeserializer = classSymbol
+				.GetMembers()
 				.OfType<IMethodSymbol>()
-				.Where(w => w.Parameters.Length is > 0 and <= 2 && 
-					w.Parameters[0].Type.IsType<HttpRequestMessage>() &&
-					w.GetAttributes().Any(a => a.AttributeClass.Name == nameof(Literals.RequestModifierAttribute)))
-				.OrderBy(o => o.GetAttributes()
-					.Where(w => w.AttributeClass.Name == nameof(Literals.RequestModifierAttribute))
+				.Where(w => w.GetAttributes(nameof(Literals.ResponseDeserializerAttribute)).Any() && (w.ReturnType is { TypeKind: TypeKind.TypeParameter } || w.ReturnType.IsAwaitableType() && w.ReturnType.GetAwaitableReturnType() is { TypeKind: TypeKind.TypeParameter }) &&
+				            (w.HasParameters<HttpResponseMessage>() ||
+				             w.HasParameters<HttpResponseMessage, CancellationToken>()) &&
+				            w.TypeArguments.Length == 1)
+				.Select(s => new ResponseDeserializerModel
+				{
+					Name = s.Name,
+					IsAsync = s.ReturnType.IsAwaitableType(),
+					HasCancellation = s.HasParameters<HttpResponseMessage, CancellationToken>(),
+				})
+				.FirstOrDefault(),
+			RequestBodySerializer = classSymbol
+				.GetMembers()
+				.OfType<IMethodSymbol>()
+				.Where(w => w.GetAttributes(nameof(Literals.RequestBodySerializerAttribute)).Any() &&
+				            (w.ReturnType.IsType<HttpContent>() || w.ReturnType.GetAwaitableReturnType()?.IsType<HttpContent>() == true) &&
+				            w.Parameters.Length is 1 or 2 && w.Parameters[0].Type.TypeKind == TypeKind.TypeParameter)
+				.Select(s => new RequestBodySerializerModel
+				{
+					Name = s.Name,
+					IsAsync = s.ReturnType.IsAwaitableType(),
+					HasCancellation = s.Parameters.Length > 1 && s.Parameters[1].Type.IsType<CancellationToken>(),
+				})
+				.FirstOrDefault(),
+			RequestModifiers = classSymbol
+				.GetMembers()
+				.OfType<IMethodSymbol>()
+				.Where(w => w.Parameters.Length is > 0 and <= 2 &&
+				            w.Parameters[0].Type.IsType<HttpRequestMessage>() &&
+				            w.GetAttributes(nameof(Literals.RequestModifierAttribute)).Any())
+				.OrderBy(o => o.GetAttributes(nameof(Literals.RequestModifierAttribute))
 					.Select(s => s.GetValue("Order", 0))
 					.FirstOrDefault())
 				.Select(s => new RequestModifierModel
@@ -104,15 +133,15 @@ public static class ClassParser
 							Namespace = x.Type.ContainingNamespace?.ToString() ?? String.Empty,
 							Location = GetLocationAttribute(x.GetAttributes(), HttpLocation.Query),
 							GenericTypes = GetGenericTypes(x.Type)
-									.ToImmutableEquatableArray(),
+								.ToImmutableEquatableArray(),
 							IsCollection = IsCollection(x.Type),
 							CollectionItemType = GetCollectionItemType(x.Type)
 						})
 						.ToImmutableEquatableArray(),
-					AllowAnyStatusCode = s.GetAttributes()
-						.GetByName("AllowAnyStatusCode")
+					AllowAnyStatusCode = s.GetAttributes("AllowAnyStatusCodeAttribute")
 						.Select(x => x.GetValue(0, true))
-						.FirstOrDefault()
+						.DefaultIfEmpty(allowAnyStatusCode)
+						.First(),
 				})
 				.ToImmutableEquatableArray(),
 			Properties = classSymbol
@@ -191,11 +220,6 @@ public static class ClassParser
 		return type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
 	}
 
-	private static IEnumerable<AttributeData> GetByName(this ImmutableArray<AttributeData> attributes, string name)
-	{
-		return attributes.Where(w => w.AttributeClass.Name.Replace(nameof(Attribute), String.Empty) == name);
-	}
-
 	private static T GetValue<T>(this AttributeData attributes, int index, T defaultValue)
 	{
 		if (attributes.ConstructorArguments.Length <= index)
@@ -207,7 +231,7 @@ public static class ClassParser
 
 		if (result?.GetType() == typeof(T))
 		{
-			return (T)result;
+			return (T) result;
 		}
 
 		return defaultValue;
@@ -226,7 +250,7 @@ public static class ClassParser
 
 			if (item.Key == name && result != null && result.GetType() == typeof(T))
 			{
-				return (T)result;
+				return (T) result;
 			}
 		}
 
@@ -251,13 +275,13 @@ public static class ClassParser
 			{
 				Location = y.AttributeClass.Name switch
 				{
-					nameof(Literals.QueryAttributes) => HttpLocation.Query,
-					nameof(Literals.HeaderAttribute) => HttpLocation.Header,
-					nameof(Literals.PathAttribute) => HttpLocation.Path,
-					nameof(Literals.BodyAttribute) => HttpLocation.Body,
-					nameof(Literals.QueryMapAttribute) => HttpLocation.QueryMap,
+					nameof(Literals.QueryAttributes)         => HttpLocation.Query,
+					nameof(Literals.HeaderAttribute)         => HttpLocation.Header,
+					nameof(Literals.PathAttribute)           => HttpLocation.Path,
+					nameof(Literals.BodyAttribute)           => HttpLocation.Body,
+					nameof(Literals.QueryMapAttribute)       => HttpLocation.QueryMap,
 					nameof(Literals.RawQueryStringAttribute) => HttpLocation.Raw,
-					_ => defaultLocation
+					_                                        => defaultLocation
 				},
 				Format = y.GetValue("Format", String.Empty),
 				Name = y.GetValue<string?>(0, null) ?? y.GetValue<string?>("Name", null),
@@ -272,7 +296,7 @@ public static class ClassParser
 		{
 			return false;
 		}
-		
+
 		if (type is IArrayTypeSymbol)
 		{
 			return true;
