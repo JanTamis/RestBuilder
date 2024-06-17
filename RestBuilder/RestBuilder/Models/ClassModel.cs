@@ -16,4 +16,5 @@ public record ClassModel
 	public ImmutableEquatableArray<PropertyModel> Properties { get; set; }
 	
 	public ImmutableEquatableArray<LocationAttributeModel> Attributes { get; set; }
+	public ImmutableEquatableArray<RequestModifierModel> RequestModifiers { get; set; }
 }

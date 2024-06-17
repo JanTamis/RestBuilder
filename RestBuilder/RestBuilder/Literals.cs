@@ -722,5 +722,27 @@ public static class Literals
 		{
 		}
 		""";
-}
 
+	public const string RequestModifierAttribute = $$"""
+		using System;
+		
+		namespace {{BaseNamespace}};
+
+		/// <summary>
+		/// Marks a method which is invoked whenever a request is made
+		/// </summary>
+		[AttributeUsage(AttributeTargets.Method, Inherited = false, AllowMultiple = false)]
+		public class RequestModifierAttribute : Attribute
+		{
+			/// <summary>
+			/// In which order the RequestModifiers should be invoked, lower values means earlier
+			/// </summary>
+			public int Order { get; set; }
+
+			public RequestModifierAttribute()
+			{
+				Order = 0;
+			}
+		}
+		""";
+}

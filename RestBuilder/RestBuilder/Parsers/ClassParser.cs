@@ -1,12 +1,16 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using RestBuilder.Enumerators;
+using RestBuilder.Helpers;
 using RestBuilder.Models;
 using TypeShape.Roslyn;
 
@@ -32,12 +36,33 @@ public static class ClassParser
 			Name = className,
 			Namespace = namespaceName,
 			IsStatic = classDeclaration.Modifiers.Any(SyntaxKind.StaticKeyword),
-			IsDisposable = classSymbol.AllInterfaces.Any(a => a.Name == nameof(IDisposable) && a.ContainingNamespace.ToString() == "System"),
+			IsDisposable = classSymbol.AllInterfaces.Any(a => a.IsType<IDisposable>()) &&
+				!classSymbol
+					.GetMembers()
+					.OfType<IMethodSymbol>()
+					.Any(a => !a.IsPartialDefinition && a.ReturnsVoid && a.Parameters.IsEmpty && a.Name == nameof(IDisposable.Dispose)),
 			ClientName = classSymbol
 				.GetAttributes()
 				.Where(w => w.AttributeClass.Name == nameof(Literals.RestClientAttribute))
 				.Select(s => s.GetValue(0, String.Empty))
 				.FirstOrDefault(),
+			RequestModifiers = classSymbol
+			.GetMembers()
+				.OfType<IMethodSymbol>()
+				.Where(w => w.Parameters.Length is > 0 and <= 2 && 
+					w.Parameters[0].Type.IsType<HttpRequestMessage>() &&
+					w.GetAttributes().Any(a => a.AttributeClass.Name == nameof(Literals.RequestModifierAttribute)))
+				.OrderBy(o => o.GetAttributes()
+					.Where(w => w.AttributeClass.Name == nameof(Literals.RequestModifierAttribute))
+					.Select(s => s.GetValue("Order", 0))
+					.FirstOrDefault())
+				.Select(s => new RequestModifierModel
+				{
+					Name = s.Name,
+					IsAsync = s.ReturnType.IsAwaitableType(),
+					HasCancellation = s.Parameters.Length > 1 && s.Parameters[1].Type.IsType<CancellationToken>(),
+				})
+				.ToImmutableEquatableArray(),
 			BaseAddress = baseAddress,
 			Attributes = GetLocationAttributes(classSymbol.GetAttributes(), HttpLocation.None)
 				.ToImmutableEquatableArray(),
@@ -237,7 +262,7 @@ public static class ClassParser
 
 	private static bool IsCollection(ITypeSymbol type)
 	{
-		if (type.ContainingNamespace?.ToString() == "System" && type.Name == "String")
+		if (type.IsType<String>())
 		{
 			return false;
 		}
@@ -249,18 +274,18 @@ public static class ClassParser
 
 		foreach (var @interface in type.AllInterfaces)
 		{
-			if (@interface.ContainingNamespace?.ToString() == "System.Collections.Generic" && @interface.Name == "IEnumerable")
+			if (@interface.ContainingNamespace?.ToString() == "System.Collections.Generic" && @interface.Name == nameof(IEnumerable))
 			{
 				return true;
 			}
 		}
 
-		return type.ContainingNamespace?.ToString() == "System.Collections.Generic" && type.Name == "IEnumerable";
+		return type.ContainingNamespace?.ToString() == "System.Collections.Generic" && type.Name == nameof(IEnumerable);
 	}
 
 	private static TypeModel? GetCollectionItemType(ITypeSymbol type)
 	{
-		if (type.ContainingNamespace?.ToString() == "System" && type.Name == "String")
+		if (type.ContainingNamespace?.ToString() == "System" && type.Name == nameof(String))
 		{
 			return null;
 		}
@@ -272,13 +297,13 @@ public static class ClassParser
 
 		foreach (var @interface in type.AllInterfaces)
 		{
-			if (@interface.ContainingNamespace?.ToString() == "System.Collections.Generic" && @interface.Name == "IEnumerable")
+			if (@interface.ContainingNamespace?.ToString() == "System.Collections.Generic" && @interface.Name == nameof(IEnumerable))
 			{
 				return GetTypeModel(@interface.TypeArguments[0]);
 			}
 		}
 
-		if (type.ContainingNamespace?.ToString() == "System.Collections.Generic" && type.Name == "IEnumerable" && type is INamedTypeSymbol namedTypeSymbol)
+		if (type.ContainingNamespace?.ToString() == "System.Collections.Generic" && type.Name == nameof(IEnumerable) && type is INamedTypeSymbol namedTypeSymbol)
 		{
 			return GetTypeModel(namedTypeSymbol.TypeArguments[0]);
 		}
@@ -304,7 +329,7 @@ public static class ClassParser
 	{
 		foreach (var @interface in type.AllInterfaces)
 		{
-			if (@interface.ContainingNamespace?.ToString() == "System.Collections.Generic" && @interface.Name == "IDictionary")
+			if (@interface.ContainingNamespace?.ToString() == "System.Collections.Generic" && @interface.Name == nameof(IDictionary))
 			{
 				return @interface.TypeArguments.Select(GetTypeModel);
 			}

@@ -71,6 +71,10 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			$"{nameof(Literals.RawQueryStringAttribute)}.g.cs",
 			SourceText.From(Literals.RawQueryStringAttribute, Encoding.UTF8)));
 
+		context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
+	$"{nameof(Literals.RequestModifierAttribute)}.g.cs",
+			SourceText.From(Literals.RequestModifierAttribute, Encoding.UTF8)));
+
 		var classes = context.SyntaxProvider
 			.ForAttributeWithMetadataName(
 				$"{Literals.BaseNamespace}.{nameof(Literals.RestClientAttribute)}",
@@ -141,7 +145,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 		if (!hasHeaders && String.IsNullOrEmpty(source.BaseAddress))
 		{
-			builder.WriteLine($"public HttpClient {source.ClientName} {{ get; }} = new HttpClient();");
+			builder.WriteLine($"public HttpClient {source.ClientName} {{ get; set; }} = new HttpClient();");
 		}
 		else
 		{
@@ -230,11 +234,11 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			var items = method.Parameters
 				.Concat<IType>(source.Properties);
 
-			WriteMethodBody(method, source.ClientName, items, tokenText, builder);
+			WriteMethodBody(method, source.ClientName, items, source.RequestModifiers, tokenText, builder);
 		}
 	}
 
-	private static void WriteMethodBody(MethodModel method, string clientName, IEnumerable<IType> items, string tokenText, SourceWriter builder)
+	private static void WriteMethodBody(MethodModel method, string clientName, IEnumerable<IType> items, ImmutableEquatableArray<RequestModifierModel> requestModifiers, string tokenText, SourceWriter builder)
 	{
 		var headers = items
 			.Where(w => w.Location.Location == HttpLocation.Header)
@@ -261,13 +265,13 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			builder.WriteLine();
 		}
 
-		if (!headers.Any() && !bodies.Any() && !methodDefaultItems.Any())
+		if (!headers.Any() && !bodies.Any() && !methodDefaultItems.Any() && requestModifiers.Length == 0)
 		{
 			WriteMethodBodyWithoutHeaders(method, clientName, items, tokenText, builder);
 		}
 		else
 		{
-			WriteMethodBodyWithHeaders(method, clientName, items, tokenText, headers, methodDefaultItems.ToDictionary(t => t.Name, t => t), bodies.FirstOrDefault(), builder);
+			WriteMethodBodyWithHeaders(method, clientName, items, tokenText, headers, methodDefaultItems.ToDictionary(t => t.Name, t => t), bodies.FirstOrDefault(), requestModifiers, builder);
 		}
 
 		WriteMethodReturn(method, tokenText, builder);
@@ -294,7 +298,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		}
 	}
 
-	private static void WriteMethodBodyWithHeaders(MethodModel method, string clientName, IEnumerable<IType> items, string tokenText, ILookup<bool, IType> headers, Dictionary<string, LocationAttributeModel> defaultItems, IType? body, SourceWriter builder)
+	private static void WriteMethodBodyWithHeaders(MethodModel method, string clientName, IEnumerable<IType> items, string tokenText, ILookup<bool, IType> headers, Dictionary<string, LocationAttributeModel> defaultItems, IType? body, ImmutableEquatableArray<RequestModifierModel> requestModifiers, SourceWriter builder)
 	{
 		builder.WriteLine($"using var request = new HttpRequestMessage(HttpMethod.{method.Method?.Method ?? "Get"}, {ParsePath(method.Path, items)});");
 
@@ -330,6 +334,24 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		}
 
 		builder.WriteLine();
+
+		if (requestModifiers.Length > 0)
+		{
+			foreach (var requestModifier in requestModifiers)
+			{
+				var awaitPrefix = requestModifier.IsAsync
+					? "await "
+					: String.Empty;
+
+				var cancellationTokenSuffix = requestModifier.HasCancellation
+					? $", {tokenText}"
+					: String.Empty;
+
+				builder.WriteLine($"{awaitPrefix}{requestModifier.Name}(request{cancellationTokenSuffix});");
+			}
+
+			builder.WriteLine();
+		}
 
 		if (method.ReturnType is nameof(HttpResponseMessage))
 		{
