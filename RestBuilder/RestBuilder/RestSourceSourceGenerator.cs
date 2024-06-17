@@ -141,36 +141,39 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			{
 			""");
 
-		builder.Indentation = 1;
+		if (source.NeedsClient)
+		{
+			builder.Indentation = 1;
 
-		if (!hasHeaders && String.IsNullOrEmpty(source.BaseAddress))
-		{
-			builder.WriteLine($"public HttpClient {source.ClientName} {{ get; set; }} = new HttpClient();");
-		}
-		else
-		{
-			builder.WriteLine($$"""
-				public HttpClient {{source.ClientName}} { get; } = new HttpClient() 
+			if (!hasHeaders && String.IsNullOrEmpty(source.BaseAddress))
+			{
+				builder.WriteLine($"public HttpClient {source.ClientName} {{ get; set; }} = new HttpClient();");
+			}
+			else
+			{
+				builder.WriteLine($$"""
+				public HttpClient {{source.ClientName}} { get; set; } = new HttpClient() 
 				{
 				""");
-		}
+			}
 
-		if (!String.IsNullOrEmpty(source.BaseAddress))
-		{
-			builder.WriteLine($"\tBaseAddress = new Uri(\"{source.BaseAddress}\"),");
-		}
+			if (!String.IsNullOrEmpty(source.BaseAddress))
+			{
+				builder.WriteLine($"\tBaseAddress = new Uri(\"{source.BaseAddress}\"),");
+			}
 
-		if (hasHeaders)
-		{
-			WriteDefaultRequestHeaders(source, builder);
-		}
+			if (hasHeaders)
+			{
+				WriteDefaultRequestHeaders(source, builder);
+			}
 
-		if (hasHeaders || !String.IsNullOrEmpty(source.BaseAddress))
-		{
-			builder.WriteLine("\t};");
-		}
+			if (hasHeaders || !String.IsNullOrEmpty(source.BaseAddress))
+			{
+				builder.WriteLine("};");
+			}
 
-		builder.Indentation = 0;
+			builder.Indentation = 0;
+		}		
 	}
 
 	private static void WriteDefaultRequestHeaders(ClassModel source, SourceWriter builder)
@@ -187,7 +190,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			}
 		}
 
-		builder.Indentation = 0;
+		builder.Indentation = 1;
 	}
 
 	private static void WriteMethods(ClassModel source, SourceWriter builder)

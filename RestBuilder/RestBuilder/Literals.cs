@@ -729,7 +729,7 @@ public static class Literals
 		namespace {{BaseNamespace}};
 
 		/// <summary>
-		/// Marks a method which is invoked whenever a request is made
+		/// Marks a method which is invoked before a request is made
 		/// </summary>
 		[AttributeUsage(AttributeTargets.Method, Inherited = false, AllowMultiple = false)]
 		public class RequestModifierAttribute : Attribute

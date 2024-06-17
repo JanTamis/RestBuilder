@@ -31,6 +31,12 @@ public static class ClassParser
 			.First()
 			.TrimEnd('?', '&');
 
+		var clientName = classSymbol
+			.GetAttributes()
+			.Where(w => w.AttributeClass.Name == nameof(Literals.RestClientAttribute))
+			.Select(s => s.GetValue(0, String.Empty))
+			.FirstOrDefault();
+
 		var source = new ClassModel
 		{
 			Name = className,
@@ -41,11 +47,11 @@ public static class ClassParser
 					.GetMembers()
 					.OfType<IMethodSymbol>()
 					.Any(a => !a.IsPartialDefinition && a.ReturnsVoid && a.Parameters.IsEmpty && a.Name == nameof(IDisposable.Dispose)),
-			ClientName = classSymbol
-				.GetAttributes()
-				.Where(w => w.AttributeClass.Name == nameof(Literals.RestClientAttribute))
-				.Select(s => s.GetValue(0, String.Empty))
-				.FirstOrDefault(),
+			ClientName = clientName,
+			NeedsClient = !classSymbol
+				.GetMembers()
+				.Any(w => w.Name == clientName && (w is IFieldSymbol field && field.Type.IsType<HttpClient>() ||
+					w is IPropertySymbol propery && propery.Type.IsType<HttpClient>())),
 			RequestModifiers = classSymbol
 			.GetMembers()
 				.OfType<IMethodSymbol>()

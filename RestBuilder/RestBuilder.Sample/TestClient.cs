@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net.Http;
-using System.Net.Http.Headers;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -9,7 +10,6 @@ namespace RestBuilder.Sample;
 
 [RestClient("Client")]
 [BaseAddress("https://api.example.com/")]
-[Header("Authorization", "Bearer 123")]
 public partial class TestClient : IDisposable
 {
 	[Get("{username}/User?")]
@@ -21,14 +21,8 @@ public partial class TestClient : IDisposable
 		CancellationToken token);
 
 	[RequestModifier]
-	public static void AddAuthorizationAsync(HttpRequestMessage request)
+	private static void LogRequest(HttpRequestMessage request)
 	{
-		// See if the request has an authorize header
-		var auth = request.Headers.Authorization;
-
-		if (auth != null)
-		{
-			request.Headers.Authorization = new AuthenticationHeaderValue(auth.Scheme, "123");
-		}
-	}
+		Console.WriteLine(request.ToString());
+  }
 }

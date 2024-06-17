@@ -54,7 +54,6 @@ public static class CompilerHelpers
 			.OfType<IMethodSymbol>()
 			.FirstOrDefault(m => m.Parameters.Length == 1 && m.Parameters[0].Type.ToDisplayString() == "System.Action");
 
-
 		if (onCompletedMethod == null)
 		{
 			return false;
