@@ -10,6 +10,7 @@ public record ClassModel
 	public string ClientName { get; set; }
 	
 	public bool IsStatic { get; set; }
+	public bool IsDisposable { get; set; }
 	
 	public ImmutableEquatableArray<MethodModel> Methods { get; set; }
 	public ImmutableEquatableArray<PropertyModel> Properties { get; set; }

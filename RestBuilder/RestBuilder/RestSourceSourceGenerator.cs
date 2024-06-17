@@ -1,10 +1,8 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
-using System.Reflection.Metadata;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -179,18 +177,9 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		{
 			foreach (var header in source.Attributes.Where(w => w.Location == HttpLocation.Header))
 			{
-				if (header.Name is "Authorization")
-				{
-					var arguments = header.Value.Split([' '], StringSplitOptions.RemoveEmptyEntries)
-						.Select(s => $"\"{s}\"")
-						.Take(2);
-
-					builder.WriteLine($"Authorization = new AuthenticationHeaderValue({String.Join(", ", arguments)}),");
-				}
-				else
-				{
-					builder.WriteLine($"{{ \"{header.Name}\", \"{header.Value}\" }},");
-				}
+				var result = ParseHeader(header, (header, value) => $"{{ \"{header}\", \"{value}\" }}");
+				
+				builder.WriteLine($"{result},");
 			}
 		}
 
@@ -202,6 +191,16 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		foreach (var method in source.Methods)
 		{
 			WriteMethod(method, source, builder);
+		}
+
+		if (source.IsDisposable)
+		{
+			builder.WriteLine();
+
+			using (builder.AppendIndentation("public void Dispose()"))
+			{
+				builder.WriteLine($"{source.ClientName}.Dispose();");
+			}
 		}
 	}
 
@@ -242,6 +241,9 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			.DistinctBy(d => d.Location.Name ?? d.Name)
 			.ToLookup(g => g.IsNullable && g.NullableAnnotation == NullableAnnotation.Annotated && String.IsNullOrEmpty(g.Location.Format));
 
+		var methodDefaultItems = method.Locations
+			.Where(w => w.Location == HttpLocation.Header);
+
 		var requiredParameters = items
 			.Where(w => w.IsNullable && w.NullableAnnotation == NullableAnnotation.NotAnnotated)
 			.ToList();
@@ -259,19 +261,19 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			builder.WriteLine();
 		}
 
-		if (!headers.Any() && !bodies.Any())
+		if (!headers.Any() && !bodies.Any() && !methodDefaultItems.Any())
 		{
 			WriteMethodBodyWithoutHeaders(method, clientName, items, tokenText, builder);
 		}
 		else
 		{
-			WriteMethodBodyWithHeaders(method, clientName, items, tokenText, headers, bodies.FirstOrDefault(), builder);
+			WriteMethodBodyWithHeaders(method, clientName, items, tokenText, headers, methodDefaultItems.ToDictionary(t => t.Name, t => t), bodies.FirstOrDefault(), builder);
 		}
 
 		WriteMethodReturn(method, tokenText, builder);
 
 		var optionalQueries = items
-			.Where(w => w.Location.Location == HttpLocation.Query && (w.IsNullable && w.NullableAnnotation == NullableAnnotation.Annotated) || w.Location.Location == HttpLocation.QueryMap || (w.Location.Location == HttpLocation.Raw && w.IsNullable))
+			.Where(w => w.Location.Location == HttpLocation.Query && w is { IsNullable: true, NullableAnnotation: NullableAnnotation.Annotated } || w.Location.Location == HttpLocation.QueryMap || (w.Location.Location == HttpLocation.Raw && w.IsNullable))
 			.ToList();
 
 		if (optionalQueries.Any())
@@ -292,23 +294,33 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		}
 	}
 
-	private static void WriteMethodBodyWithHeaders(MethodModel method, string clientName, IEnumerable<IType> items, string tokenText, ILookup<bool, IType> headers, IType? body, SourceWriter builder)
+	private static void WriteMethodBodyWithHeaders(MethodModel method, string clientName, IEnumerable<IType> items, string tokenText, ILookup<bool, IType> headers, Dictionary<string, LocationAttributeModel> defaultItems, IType? body, SourceWriter builder)
 	{
 		builder.WriteLine($"using var request = new HttpRequestMessage(HttpMethod.{method.Method?.Method ?? "Get"}, {ParsePath(method.Path, items)});");
 
-		if (headers[false].Any())
+		var defaultHeaders = defaultItems
+			.Where(item => headers[false].All(a => a.Name != item.Key) && headers[true].All(a => a.Name != item.Key))
+			.ToList();
+		
+		if (headers[false].Any() || defaultHeaders.Any())
 		{
 			builder.WriteLine();
 		}
 
 		foreach (var header in headers[false])
 		{
-			WriteHeader(header, builder);
+			WriteHeader(header, defaultItems.TryGetValue(header.Name, out var value) ? value : null, builder);
 		}
 
 		foreach (var header in headers[true])
 		{
-			WriteNullableHeader(header, builder);
+			WriteNullableHeader(header, defaultItems.TryGetValue(header.Name, out var value) ? value : null, builder);
+		}
+
+		foreach (var item in defaultHeaders)
+		{
+			var result = ParseHeader(item.Value, (header, value) => $"Add(\"{item.Key}\", \"{item.Value.Value}\");");	
+			builder.WriteLine($"request.Headers.{result};");
 		}
 
 		if (body != null)
@@ -329,23 +341,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		}
 	}
 
-	private static void WriteHeader(IType header, SourceWriter builder)
-	{
-		var format = !String.IsNullOrEmpty(header.Location.Format)
-			? $"\"{header.Location.Format}\""
-			: String.Empty;
-
-		var result = $"{header.Name}.ToString({format})";
-
-		if (HasHoles(header.Location.Format))
-		{
-			result = $"$\"{FillHoles(header.Location.Format, header.Name)}\"";
-		}
-
-		builder.WriteLine($"request.Headers.Add(\"{header.Location.Name ?? header.Name}\", {result});");
-	}
-
-	private static void WriteNullableHeader(IType header, SourceWriter builder)
+	private static void WriteHeader(IType header, LocationAttributeModel? defaultItem, SourceWriter builder)
 	{
 		var format = !String.IsNullOrEmpty(header.Location.Format)
 			? $"\"{header.Location.Format}\""
@@ -362,11 +358,50 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			result = $"$\"{FillHoles(header.Location.Format, header.Name)}\"";
 		}
 
-		builder.WriteLine();
-
-		using (builder.AppendIndentation($"if ({header.Name} is not null)"))
+		if (defaultItem is null)
 		{
-			builder.WriteLine($"request.Headers.Add(\"{header.Location.Name}\", {result});");
+			builder.WriteLine($"request.Headers.Add(\"{header.Location.Name ?? header.Name}\", {result});");
+		}
+		else
+		{
+			builder.WriteLine($"request.Headers.Add(\"{header.Location.Name ?? header.Name}\", {result} ?? \"{defaultItem.Value}\");");
+		}
+	}
+
+	private static void WriteNullableHeader(IType header, LocationAttributeModel? defaultItems, SourceWriter builder)
+	{
+		var format = !String.IsNullOrEmpty(header.Location.Format)
+			? $"\"{header.Location.Format}\""
+			: String.Empty;
+		
+		var suffix = header is { Namespace: "System", Type: "String" or "string" }
+			? String.Empty
+			: $".ToString({format})";
+
+		if (header.IsNullable && defaultItems != null)
+		{
+			suffix = '?' + suffix;
+		}
+		
+		var result = $"{header.Name}{suffix}";
+		
+		if (HasHoles(header.Location.Format))
+		{
+			result = $"$\"{FillHoles(header.Location.Format, header.Name)}\"";
+		}
+
+		if (defaultItems is null)
+		{
+			builder.WriteLine();
+
+			using (builder.AppendIndentation($"if ({header.Name} is not null)"))
+			{
+				builder.WriteLine($"request.Headers.Add(\"{header.Location.Name}\", {result});");
+			}
+		}
+		else
+		{
+			builder.WriteLine($"request.Headers.Add(\"{header.Location.Name}\", {result} ?? \"{defaultItems.Value}\");");
 		}
 	}
 
@@ -858,11 +893,11 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		{
 			if (!String.IsNullOrEmpty(location.Format))
 			{
-				result = $"{fieldName}:{location.Format}";
+				result = $"{fieldName}.ToString(\"{location.Format}\")";
 			}
 			else
 			{
-				result = $"{fieldName}.ToString(\"{location.Format}\")";
+				result = fieldName;
 			}
 		}
 
@@ -881,7 +916,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			}
 			else
 			{
-				result = $"{fieldName}";
+				result = fieldName;
 			}
 		}
 
@@ -900,7 +935,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			}
 			else
 			{
-				result = $"{fieldName}";
+				result = fieldName;
 			}
 		}
 
@@ -952,5 +987,91 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 	{
 		return !(@namespace is "System" &&
 		         type is "Int16" or "short" or "Int32" or "int" or "Int64" or "long" or "UInt16" or "ushort" or "UInt32" or "uint" or "UInt64" or "ulong" or "Single" or "Double" or "Decimal" or "Boolean" or "Char");
+	}
+
+	private static string ParseHeader(LocationAttributeModel location, Func<string, string, string> defaultBuilder)
+	{
+		switch (location.Name)
+		{
+			case "Accept":
+				return $"Accept.Add(new MediaTypeWithQualityHeaderValue(\"{location.Value}\"))";
+			case "Accept-Charset":
+				return $"AcceptCharset.Add(new StringWithQualityHeaderValue(\"{location.Value}\"))";
+			case "Accept-Encoding":
+				return $"AcceptEncoding.Add(new StringWithQualityHeaderValue(\"{location.Value}\"))";
+			case "Accept-Language":
+				return $"AcceptLanguage.Add(new StringWithQualityHeaderValue(\"{location.Value}\"))";
+			case "Authorization":
+				var authorizationArguments = location.Value.Split([' '], StringSplitOptions.RemoveEmptyEntries)
+					.Select(s => $"\"{s}\"")
+					.Take(2);
+				
+				return $"Authorization = new AuthenticationHeaderValue({String.Join(", ", authorizationArguments)})";
+			case "Connection":
+				return $"Connection.Add(\"{location.Value}\")";
+			case "ConnectionClose" when Boolean.TryParse(location.Value, out var result):
+				return $"ConnectionClose = {result.ToString().ToLower()}";
+			case "Date" when DateTime.TryParse(location.Value, out _):
+				return $"Date = DateTimeOffset.Parse(\"{location.Value}\")";
+			case "Expect":
+				return $"Expect.Add(new NameValueWithParametersHeaderValue(\"{location.Value}\"))";
+			case "ExpectContinue" when Boolean.TryParse(location.Value, out var result):
+				return $"ExpectContinue = {result.ToString().ToLower()}";
+			case "From":
+				return $"From = \"{location.Value}\"";
+			case "Host":
+				return $"Host = \"{location.Value}\"";
+			case "If-Match":
+				return $"IfMatch.Add(new EntityTagHeaderValue(\"{location.Value}\"))";
+			case "If-Modified-Since" when DateTime.TryParse(location.Value, out _):
+				return $"IfModifiedSince = DateTimeOffset.Parse(\"{location.Value}\")";
+			case "If-None-Match":
+				return $"IfNoneMatch.Add(new EntityTagHeaderValue(\"{location.Value}\"))";
+			case "If-Range":
+				return $"IfRange = new RangeConditionHeaderValue(\"{location.Value}\")";
+			case "If-Unmodified-Since" when DateTime.TryParse(location.Value, out _):
+				return $"IfUnmodifiedSince = DateTimeOffset.Parse(\"{location.Value}\")";
+			case "Max-Forwards" when Int32.TryParse(location.Value, out var result):
+				return $"MaxForwards = {result}";
+			case "Pragma":
+				return $"Pragma.Add(new NameValueHeaderValue(\"{location.Value}\"))";
+			case ":protocol":
+				return $"Protocol = \"{location.Value}\"";
+			case "Proxy-Authorization":
+				var proxyArguments = location.Value.Split([' '], StringSplitOptions.RemoveEmptyEntries)
+					.Select(s => $"\"{s}\"")
+					.Take(2);
+				
+				return $"ProxyAuthorization = new AuthenticationHeaderValue({String.Join(", ", proxyArguments)})";
+			case "Referer":
+				return $"Referrer = new Uri(\"{location.Value}\", UriKind.RelativeOrAbsolute)";
+			case "TE":
+				return $"TE.Add(new TransferCodingWithQualityHeaderValue(\"{location.Value}\"))";
+			case "Trailer":
+				return $"Trailer.Add(\"{location.Value}\")";
+			case "Transfer-Encoding":
+				return $"TransferEncoding.Add(new TransferCodingHeaderValue(\"{location.Value}\"))";
+			case "TransferEncodingChunked" when Boolean.TryParse(location.Value, out var result):
+				return $"TransferEncodingChunked = {result.ToString().ToLower()}";
+			case "Upgrade":
+				var upgradeArguments = location.Value.Split([' '], StringSplitOptions.RemoveEmptyEntries)
+					.Select(s => $"\"{s}\"")
+					.Take(2);
+				return $"Upgrade.Add(new ProductHeaderValue({String.Join(", ", upgradeArguments)}))";
+			case "User-Agent":
+				var userAgentArguments = location.Value.Split([' '], StringSplitOptions.RemoveEmptyEntries)
+					.Select(s => $"\"{s}\"")
+					.Take(2);
+				
+				return $"UserAgent.Add(new ProductInfoHeaderValue({String.Join(", ", userAgentArguments)}))";
+			case "Via":
+				var viaArguments = location.Value.Split([' '], StringSplitOptions.RemoveEmptyEntries)
+					.Select(s => $"\"{s}\"")
+					.Take(4);
+				
+				return $"Via.Add(new ViaHeaderValue({String.Join(", ", viaArguments)}))";
+			default:
+				return defaultBuilder(location.Name, location.Value);
+		}
 	}
 }

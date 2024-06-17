@@ -32,6 +32,7 @@ public static class ClassParser
 			Name = className,
 			Namespace = namespaceName,
 			IsStatic = classDeclaration.Modifiers.Any(SyntaxKind.StaticKeyword),
+			IsDisposable = classSymbol.AllInterfaces.Any(a => a.Name == nameof(IDisposable) && a.ContainingNamespace.ToString() == "System"),
 			ClientName = classSymbol
 				.GetAttributes()
 				.Where(w => w.AttributeClass.Name == nameof(Literals.RestClientAttribute))
@@ -59,6 +60,9 @@ public static class ClassParser
 						.Select(x => x.GetValue(0, String.Empty))
 						.FirstOrDefault()
 						.TrimEnd('?', '&'),
+					Locations = GetLocationAttributes(s.GetAttributes(), HttpLocation.None)
+						.Where(w => w.Location != HttpLocation.None)
+						.ToImmutableEquatableArray(),
 					Parameters = s.Parameters
 						.Select(x => new ParameterModel
 						{

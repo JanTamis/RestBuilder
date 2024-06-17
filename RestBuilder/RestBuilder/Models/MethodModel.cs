@@ -15,4 +15,5 @@ public record MethodModel
 	public HttpMethod Method { get; set; }
 	
 	public ImmutableEquatableArray<ParameterModel> Parameters { get; set; }
+	public ImmutableEquatableArray<LocationAttributeModel> Locations { get; set; }
 }
