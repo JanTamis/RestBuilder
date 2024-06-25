@@ -14,6 +14,8 @@ public record ClassModel
 	public bool IsStatic { get; set; }
 	public bool IsDisposable { get; set; }
 
+	public string? HttpClientInitializer { get; set; }
+
 	public ResponseDeserializerModel? ResponseDeserializer { get; set; }
 	public RequestBodySerializerModel? RequestBodySerializer { get; set; }
 	

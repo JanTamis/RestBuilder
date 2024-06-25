@@ -773,4 +773,15 @@ public static class Literals
 		{
 		}
 		""";
+	
+	public const string HttpClientInitializer = $$"""
+		using System;
+		
+		namespace {{BaseNamespace}};
+		
+		[AttributeUsage(AttributeTargets.Method, Inherited = false, AllowMultiple = false)]
+		public sealed class HttpClientInitializerAttribute : Attribute
+		{
+		}
+		""";
 }

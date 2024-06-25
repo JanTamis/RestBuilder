@@ -18,4 +18,11 @@ public static class EnumeratorHelpers
 			}
 		}
 	}
+	
+	public static T FirstOrDefault<T>(this IEnumerable<T> items, T defaultValue)
+	{
+		return items
+			.DefaultIfEmpty(defaultValue)
+			.First();
+	}
 }
