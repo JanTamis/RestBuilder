@@ -16,7 +16,7 @@ public partial class TestClient : IDisposable
 	[Get("{username}/User?")]
 	[Header("Authorization", "Bearer 123")]
 	[AllowAnyStatusCode]
-	public partial ValueTask<byte[]> GetUserAsync(
+	public partial ValueTask<string> GetUserAsync(
 		[Path("username")] string password,
 		[QueryMap] Dictionary<string, List<int>?> name,
 		CancellationToken token);
@@ -32,23 +32,23 @@ public partial class TestClient : IDisposable
 	{
 		return await response.Content.ReadFromJsonAsync<T>(token);
 	}
-	
-	[RequestBodySerializer]
-	private HttpContent Serialize<T>(T body)
-	{
-		if (typeof(T) == typeof(String))
-		{
-			return new StringContent((String)(object)body);
-		}
- 
-		if (typeof(T) == typeof(Stream))
-		{
-			return new StreamContent((Stream)(object)body);
-		}
-		
-		return JsonContent.Create(body);
-	}
-	
+
+	//[RequestBodySerializer]
+	//private HttpContent Serialize<T>(T body)
+	//{
+	//	if (typeof(T) == typeof(String))
+	//	{
+	//		return new StringContent((String)(object)body);
+	//	}
+
+	//	if (typeof(T) == typeof(Stream))
+	//	{
+	//		return new StreamContent((Stream)(object)body);
+	//	}
+
+	//	return JsonContent.Create(body);
+	//}
+
 	[HttpClientInitializer]
 	public static HttpClient CreateClient()
 	{

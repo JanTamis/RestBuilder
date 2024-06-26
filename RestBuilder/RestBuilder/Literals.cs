@@ -774,7 +774,7 @@ public static class Literals
 		}
 		""";
 	
-	public const string HttpClientInitializer = $$"""
+	public const string HttpClientInitializerAttribute = $$"""
 		using System;
 		
 		namespace {{BaseNamespace}};

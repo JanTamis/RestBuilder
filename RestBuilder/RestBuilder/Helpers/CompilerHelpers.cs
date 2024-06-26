@@ -5,6 +5,9 @@ using System.Collections.Generic;
 using System.Linq;
 using RestBuilder.Interfaces;
 using RestBuilder.Models;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace RestBuilder.Helpers;
 
@@ -58,7 +61,7 @@ public static class CompilerHelpers
 	public static bool IsType<T>(this ISymbol symbol)
 	{
 		var type = typeof(T);
-		return symbol.ContainingNamespace.ToString() == type.Namespace && symbol.Name == type.Name;
+		return symbol.ContainingNamespace?.ToString() == type.Namespace && symbol.Name == type.Name;
 	}
 
 	public static bool IsType<T>(this IType symbol)
@@ -266,5 +269,47 @@ public static class CompilerHelpers
 	public static IEnumerable<IPropertySymbol> GetProperties(this ITypeSymbol type)
 	{
 		return type.GetMembers().OfType<IPropertySymbol>();
+	}
+
+	public static bool IsPartial(this IMethodSymbol method)
+	{
+		return method.DeclaringSyntaxReferences
+			.Any(syntax => syntax.GetSyntax() is MethodDeclarationSyntax declaration && declaration.Modifiers
+				.Any(modifier => modifier.IsKind(SyntaxKind.PartialKeyword)));
+	}
+
+	public static Location? GetLocation(this ISymbol symbol)
+	{
+		return symbol.Locations.FirstOrDefault();
+	}
+
+	public static void ReportDiagnostic<T>(this SymbolAnalysisContext context, ISymbol symbol, Func<T, CSharpSyntaxNode> selector, DiagnosticDescriptor descriptor) where T : CSharpSyntaxNode
+	{
+		foreach (var syntaxReference in symbol.DeclaringSyntaxReferences)
+		{
+			var syntax = syntaxReference.GetSyntax(context.CancellationToken);
+
+			if (syntax is not T declaration)
+			{
+				continue;
+			}
+
+			context.ReportDiagnostic(Diagnostic.Create(descriptor, selector(declaration).GetLocation(), symbol.Name));
+		}
+	}
+
+	public static void ReportDiagnostic<T>(this SymbolAnalysisContext context, ISymbol symbol, Func<T, SyntaxToken> selector, DiagnosticDescriptor descriptor) where T : CSharpSyntaxNode
+	{
+		foreach (var syntaxReference in symbol.DeclaringSyntaxReferences)
+		{
+			var syntax = syntaxReference.GetSyntax(context.CancellationToken);
+
+			if (syntax is not T declaration)
+			{
+				continue;
+			}
+
+			context.ReportDiagnostic(Diagnostic.Create(descriptor, selector(declaration).GetLocation(), symbol.Name));
+		}
 	}
 }

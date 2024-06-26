@@ -38,7 +38,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		RegisterSource(nameof(Literals.RequestModifierAttribute), Literals.RequestModifierAttribute);
 		RegisterSource(nameof(Literals.ResponseDeserializerAttribute), Literals.ResponseDeserializerAttribute);
 		RegisterSource(nameof(Literals.RequestBodySerializerAttribute), Literals.RequestBodySerializerAttribute);
-		RegisterSource(nameof(Literals.HttpClientInitializer), Literals.HttpClientInitializer);
+		RegisterSource(nameof(Literals.HttpClientInitializerAttribute), Literals.HttpClientInitializerAttribute);
 
 		var classes = context.SyntaxProvider
 			.ForAttributeWithMetadataName(
@@ -198,7 +198,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 		if (!String.IsNullOrEmpty(method.ReturnTypeName))
 		{
-			returnType = $"Task<{method.ReturnTypeName}>";
+			returnType = method.ReturnTypeName;
 		}
 
 		builder.WriteLine();
@@ -309,7 +309,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		if (body != null)
 		{
 			builder.WriteLine();
-			WriteRequestBody(body, classModel, tokenText, builder);
+			BodyWriter.WriteRequestBody(body, classModel, tokenText, builder);
 		}
 
 		builder.WriteLine();
@@ -364,11 +364,11 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 					? $", {tokenText}"
 					: String.Empty;
 
-				builder.WriteLine($"return {awaitPrefix}{responseDeserializer.Name}<{method.ReturnTypeName}>(response{cancellationTokenSuffix});");
+				builder.WriteLine($"return {awaitPrefix}{responseDeserializer.Name}<{method.ReturnType.Name}>(response{cancellationTokenSuffix});");
 			}
 			else
 			{
-				builder.WriteLine($"return await response.Content.ReadFromJsonAsync<{method.ReturnTypeName}>({tokenText});");
+				builder.WriteLine($"return await response.Content.ReadFromJsonAsync<{method.ReturnType.Name}>({tokenText});");
 			}
 
 			return;
@@ -399,37 +399,5 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		builder.Indentation = Math.Max(builder.Indentation - 1, 0);
 
 		builder.WriteLine('}');
-	}
-
-	private static void WriteRequestBody(IType body, ClassModel classModel, string tokenText, SourceWriter builder)
-	{
-		if (classModel.RequestBodySerializer is not null)
-		{
-			var awaitPrefix = classModel.RequestBodySerializer.IsAsync
-				? "await "
-				: String.Empty;
-
-			var cancellationTokenSuffix = classModel.RequestBodySerializer.HasCancellation
-				? $", {tokenText}"
-				: String.Empty;
-
-			builder.WriteLine($"request.Content = {awaitPrefix}{classModel.RequestBodySerializer.Name}({body.Name}{cancellationTokenSuffix});");
-		}
-		else if (body.IsType<String>())
-		{
-			builder.WriteLine($"request.Content = new StringContent({body.Name});");
-		}
-		else if (body.IsType<byte[]>())
-		{
-			builder.WriteLine($"request.Content = new ByteArrayContent({body.Name});");
-		}
-		else if (body.IsType<Stream>())
-		{
-			builder.WriteLine($"request.Content = new StreamContent({body.Name});");
-		}
-		else
-		{
-			builder.WriteLine($"request.Content = JsonContent.Create({body.Name});");
-		}
 	}
 }

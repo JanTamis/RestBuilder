@@ -31,7 +31,7 @@
 
 	<Target Name="GetDependencyTargetPaths">
 		<ItemGroup>
-			<TargetPathWithTargetPlatformMoniker Include="$(PkgTypeShape_Roslyn)\lib\netstandard2.0\TypeShape.Roslyn.dll" IncludeRuntimeDependency="false"/>
+			<TargetPathWithTargetPlatformMoniker Include="$(PkgTypeShape_Roslyn)\lib\netstandard2.0\TypeShape.Roslyn.dll" IncludeRuntimeDependency="false" />
 		</ItemGroup>
 	</Target>
 </Project>

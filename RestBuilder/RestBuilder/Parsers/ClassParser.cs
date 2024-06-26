@@ -186,6 +186,22 @@ public static class ClassParser
 
 	private static TypeModel GetTypeModel(ITypeSymbol type)
 	{
+		if (type is IArrayTypeSymbol arrayType)
+		{
+			var ranks = String.Concat(Enumerable.Repeat("[]", arrayType.Rank));
+
+			return new TypeModel
+			{
+				Name = $"{ToName(arrayType.ElementType)}{ranks}",
+				IsNullable = arrayType.IsReferenceType,
+				NullableAnnotation = type.NullableAnnotation,
+				IsCollection = true,
+				Namespace = "System",
+				CollectionType = GetCollectionItemType(type),
+				Type = $"{ToName(arrayType.ElementType)}{ranks}",
+			};
+		}
+
 		return new TypeModel
 		{
 			Name = type.Name,
@@ -289,9 +305,9 @@ public static class ClassParser
 			.Select(s => new MethodModel
 			{
 				Name = s.Name,
-				ReturnTypeName = ToName(GetTaskTypeArgument(s.ReturnType, compilation)),
+				ReturnTypeName = ToName(s.ReturnType),
 				ReturnType = GetTypeModel(s.ReturnType.GetAwaitableReturnType()),
-				ReturnNamespace = GetTaskTypeArgument(s.ReturnType, compilation)?.ContainingNamespace?.ToString() ?? String.Empty,
+				ReturnNamespace = s.ReturnType?.ContainingNamespace?.ToString() ?? String.Empty,
 				Method = GetHttpMethod(s),
 				Path = s.GetAttributes()
 					.Where(x => IsValidHttpMethod(x.AttributeClass?.Name?.Replace(nameof(Attribute), String.Empty)))
@@ -372,21 +388,21 @@ public static class ClassParser
 			.FirstOrDefault();
 	}
 
-	private static HttpMethod GetHttpMethod(IMethodSymbol s)
-	{
-		return s.GetAttributes()
-			.Select(x => x.AttributeClass?.Name?.Replace(nameof(Attribute), String.Empty))
-			.Where(IsValidHttpMethod)
-			.Select(x => new HttpMethod(x))
-			.FirstOrDefault(HttpMethod.Get);
-	}
-
 	private static string? GetHttpClientInitializer(INamedTypeSymbol classSymbol)
 	{
 		return classSymbol
 			.GetMethods()
 			.Where(w => w.IsStatic && w.HasAttribute("HttpClientInitializerAttribute") && w.Parameters.Length == 0 && w.HasReturnType<HttpClient>())
 			.Select(s => s.Name)
+			.FirstOrDefault();
+	}
+
+	public static HttpMethod? GetHttpMethod(IMethodSymbol s)
+	{
+		return s.GetAttributes()
+			.Select(x => x.AttributeClass?.Name?.Replace(nameof(Attribute), String.Empty))
+			.Where(IsValidHttpMethod)
+			.Select(x => new HttpMethod(x))
 			.FirstOrDefault();
 	}
 }
