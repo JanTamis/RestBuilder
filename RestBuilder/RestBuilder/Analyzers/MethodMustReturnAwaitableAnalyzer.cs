@@ -45,6 +45,6 @@ public class MethodMustReturnAwaitableAnalyzer : DiagnosticAnalyzer
 			return;
 		}
 
-		context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.ReturnType, DiagnosticsDescriptors.MethodMustReturnAwaitable);
+		context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.FindAttributeByName(httpMethod.Method), DiagnosticsDescriptors.MethodMustReturnAwaitable);
 	}
 }

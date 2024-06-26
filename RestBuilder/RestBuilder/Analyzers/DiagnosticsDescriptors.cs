@@ -23,7 +23,7 @@ public static class DiagnosticsDescriptors
 	public static readonly DiagnosticDescriptor MethodMustReturnHttpClientHttpClientInitializer = new(
 		"REST003",
 		"Method must return HttpClient",
-		"The method '{0}' must return HttpClient, because it is used for HttpClientInitializer",
+		"The method '{0}' must return HttpClient",
 		"RestAnalyzer",
 		DiagnosticSeverity.Error,
 		true);
@@ -31,7 +31,7 @@ public static class DiagnosticsDescriptors
 	public static readonly DiagnosticDescriptor MethodNoParametersHttpClientInitializer = new(
 		"REST004",
 		"Method must not contain parameters",
-		"The method '{0}' must not contain parameters, because it is used for HttpClientInitializer",
+		"The method '{0}' must not contain parameters",
 		"RestAnalyzer",
 		DiagnosticSeverity.Error,
 		true);
@@ -39,7 +39,7 @@ public static class DiagnosticsDescriptors
 	public static readonly DiagnosticDescriptor MethodMustBeStaticHttpClientInitializer = new(
 	"REST005",
 	"Method must be static",
-	"The method '{0}' must be static, because it is used for HttpClientInitializer",
+	"The method '{0}' must be static",
 	"RestAnalyzer",
 	DiagnosticSeverity.Error,
 	true);

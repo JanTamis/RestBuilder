@@ -283,7 +283,7 @@ public static class CompilerHelpers
 		return symbol.Locations.FirstOrDefault();
 	}
 
-	public static void ReportDiagnostic<T>(this SymbolAnalysisContext context, ISymbol symbol, Func<T, CSharpSyntaxNode> selector, DiagnosticDescriptor descriptor) where T : CSharpSyntaxNode
+	public static void ReportDiagnostic<T>(this SymbolAnalysisContext context, ISymbol symbol, Func<T, CSharpSyntaxNode?> selector, DiagnosticDescriptor descriptor) where T : CSharpSyntaxNode
 	{
 		foreach (var syntaxReference in symbol.DeclaringSyntaxReferences)
 		{
@@ -294,7 +294,7 @@ public static class CompilerHelpers
 				continue;
 			}
 
-			context.ReportDiagnostic(Diagnostic.Create(descriptor, selector(declaration).GetLocation(), symbol.Name));
+			context.ReportDiagnostic(Diagnostic.Create(descriptor, selector(declaration)?.GetLocation() ?? Location.None, symbol.Name));
 		}
 	}
 
@@ -311,5 +311,21 @@ public static class CompilerHelpers
 
 			context.ReportDiagnostic(Diagnostic.Create(descriptor, selector(declaration).GetLocation(), symbol.Name));
 		}
+	}
+
+	public static AttributeSyntax? FindAttributeByName(this MethodDeclarationSyntax methodDeclaration, string attributeName)
+	{
+		foreach (var attributeList in methodDeclaration.AttributeLists)
+		{
+			foreach (var attribute in attributeList.Attributes)
+			{
+				if (attribute.Name is IdentifierNameSyntax identifier && identifier.Identifier.Text == attributeName)
+				{
+					return attribute;
+				}
+			}
+		}
+
+		return null;
 	}
 }

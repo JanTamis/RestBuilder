@@ -42,36 +42,23 @@ public class HttpClientInitializerAnalyzer : DiagnosticAnalyzer
 		{
 			return;
 		}
-
+		
 		if (!method.HasReturnType<HttpClient>())
 		{
-			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.ReturnType, DiagnosticsDescriptors.MethodMustReturnHttpClientHttpClientInitializer);
+			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.FindAttributeByName("HttpClientInitializer"), 
+				DiagnosticsDescriptors.MethodMustReturnHttpClientHttpClientInitializer);
 		}
 
 		if (!method.Parameters.IsEmpty)
 		{
-			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.ParameterList, DiagnosticsDescriptors.MethodNoParametersHttpClientInitializer);
+			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.FindAttributeByName("HttpClientInitializer"), 
+				DiagnosticsDescriptors.MethodNoParametersHttpClientInitializer);
 		}
 
 		if (!method.IsStatic)
 		{
-			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.Identifier, DiagnosticsDescriptors.MethodMustBeStaticHttpClientInitializer);
+			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.FindAttributeByName("HttpClientInitializer"), 
+				DiagnosticsDescriptors.MethodMustBeStaticHttpClientInitializer);
 		}
-	}
-
-	public static AttributeSyntax FindAttributeByName(MethodDeclarationSyntax methodDeclaration, string attributeName)
-	{
-		foreach (var attributeList in methodDeclaration.AttributeLists)
-		{
-			foreach (var attribute in attributeList.Attributes)
-			{
-				if (attribute.Name.ToString() == attributeName)
-				{
-					return attribute;
-				}
-			}
-		}
-
-		return null;
 	}
 }
