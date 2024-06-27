@@ -14,7 +14,7 @@ public static class DiagnosticsDescriptors
 
 	public static readonly DiagnosticDescriptor MethodMustReturnAwaitable = new(
 		"REST002",
-		"Method must return a awaitable type",
+		"Method must return an awaitable type",
 		"The method '{0}' must return a awaitable type",
 		"RestAnalyzer",
 		DiagnosticSeverity.Error,

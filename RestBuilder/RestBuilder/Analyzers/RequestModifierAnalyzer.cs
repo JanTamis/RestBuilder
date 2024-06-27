@@ -4,7 +4,10 @@ using RestBuilder.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Net.Http;
 using System.Text;
+using System.Threading;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace RestBuilder.Analyzers;
 
@@ -35,11 +38,15 @@ public class RequestModifierAnalyzer : DiagnosticAnalyzer
 			return;
 		}
 
-		if (!method.HasAttribute(nameof(Literals.RequestModifierAttribute)))
+		if (!method.HasAttribute(nameof(Literals.RequestModifier)))
 		{
 			return;
 		}
 
-
+		if (method.ReturnsVoid && method.HasParameters<HttpRequestMessage, CancellationToken>())
+		{
+			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.FindAttributeByName(nameof(Literals.RequestModifier)), 
+				DiagnosticsDescriptors.UseOfCancellationTokenInvalid);
+		}
 	}
 }

@@ -721,7 +721,7 @@ public static class Literals
 		}
 		""";
 
-	public const string RequestModifierAttribute = $$"""
+	public const string RequestModifier = $$"""
 		using System;
 		
 		namespace {{BaseNamespace}};

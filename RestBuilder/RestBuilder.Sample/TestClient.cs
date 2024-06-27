@@ -16,13 +16,13 @@ public partial class TestClient : IDisposable
 	[Get("{username}/User?")]
 	[Header("Authorization", "Bearer 123")]
 	[AllowAnyStatusCode]
-	public partial ValueTask<string> GetUserAsync(
+	public partial void GetUserAsync(
 		[Path("username")] string password,
 		[QueryMap] Dictionary<string, List<int>?> name,
 		CancellationToken token);
 
 	[RequestModifier]
-	private static void LogRequest(HttpRequestMessage request)
+	private static void LogRequest(HttpRequestMessage request, CancellationToken token)
 	{
 		Console.WriteLine(request.ToString());
   }

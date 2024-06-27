@@ -283,8 +283,8 @@ public static class ClassParser
 			.OfType<IMethodSymbol>()
 			.Where(w => w.Parameters.Length is > 0 and <= 2 &&
 			            w.Parameters[0].Type.IsType<HttpRequestMessage>() &&
-			            w.GetAttributes(nameof(Literals.RequestModifierAttribute)).Any())
-			.OrderBy(o => o.GetAttributes(nameof(Literals.RequestModifierAttribute))
+			            w.GetAttributes(nameof(Literals.RequestModifier)).Any())
+			.OrderBy(o => o.GetAttributes(nameof(Literals.RequestModifier))
 				.Select(s => s.GetValue("Order", 0))
 				.FirstOrDefault())
 			.Select(s => new RequestModifierModel

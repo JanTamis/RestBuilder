@@ -35,7 +35,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		RegisterSource(nameof(Literals.RestClientAttribute), Literals.RestClientAttribute);
 		RegisterSource(nameof(Literals.QueryMapAttribute), Literals.QueryMapAttribute);
 		RegisterSource(nameof(Literals.RawQueryStringAttribute), Literals.RawQueryStringAttribute);
-		RegisterSource(nameof(Literals.RequestModifierAttribute), Literals.RequestModifierAttribute);
+		RegisterSource(nameof(Literals.RequestModifier), Literals.RequestModifier);
 		RegisterSource(nameof(Literals.ResponseDeserializerAttribute), Literals.ResponseDeserializerAttribute);
 		RegisterSource(nameof(Literals.RequestBodySerializerAttribute), Literals.RequestBodySerializerAttribute);
 		RegisterSource(nameof(Literals.HttpClientInitializerAttribute), Literals.HttpClientInitializerAttribute);

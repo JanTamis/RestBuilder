@@ -40,19 +40,19 @@ public class HttpClientInitializerAnalyzer : DiagnosticAnalyzer
 		
 		if (!method.HasReturnType<HttpClient>())
 		{
-			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.FindAttributeByName("HttpClientInitializer"), 
+			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.ReturnType, 
 				DiagnosticsDescriptors.MethodMustReturnHttpClientHttpClientInitializer);
 		}
 
 		if (!method.Parameters.IsEmpty)
 		{
-			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.FindAttributeByName("HttpClientInitializer"), 
+			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.Identifier, 
 				DiagnosticsDescriptors.MethodNoParametersHttpClientInitializer);
 		}
 
 		if (!method.IsStatic)
 		{
-			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.FindAttributeByName("HttpClientInitializer"), 
+			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.Identifier, 
 				DiagnosticsDescriptors.MethodMustBeStaticHttpClientInitializer);
 		}
 	}
