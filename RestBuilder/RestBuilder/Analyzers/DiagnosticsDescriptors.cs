@@ -43,4 +43,12 @@ public static class DiagnosticsDescriptors
 	"RestAnalyzer",
 	DiagnosticSeverity.Error,
 	true);
+
+	public static readonly DiagnosticDescriptor UseOfCancellationTokenInvalid = new(
+	"REST006",
+	"Invalid use of the CancellationToken",
+	"A CancellationToken can only be provided if '{0}' returns an awaitable type",
+	"RestAnalyzer",
+	DiagnosticSeverity.Error,
+	true);
 }

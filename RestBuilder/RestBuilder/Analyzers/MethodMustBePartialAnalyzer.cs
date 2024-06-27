@@ -3,7 +3,6 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
 using RestBuilder.Helpers;
-using System;
 using System.Collections.Immutable;
 using System.Linq;
 using RestBuilder.Parsers;
@@ -14,7 +13,8 @@ namespace RestBuilder.Analyzers;
 public class MethodMustBePartialAnalyzer : DiagnosticAnalyzer
 {
 	public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; }
-		 = ImmutableArray.Create(DiagnosticsDescriptors.MethodMustBePartial);
+		 = ImmutableArray.Create(
+			 DiagnosticsDescriptors.MethodMustBePartial);
 
 	public override void Initialize(AnalysisContext context)
 	{

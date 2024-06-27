@@ -1,5 +1,3 @@
-using System;
-
 namespace RestBuilder;
 
 public static class Literals

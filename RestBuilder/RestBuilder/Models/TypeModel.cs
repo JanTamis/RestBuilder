@@ -1,5 +1,4 @@
 using Microsoft.CodeAnalysis;
-using RestBuilder.Interfaces;
 
 namespace RestBuilder.Models;
 
