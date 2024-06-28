@@ -30,25 +30,33 @@ public static class DiagnosticsDescriptors
 
 	public static readonly DiagnosticDescriptor MethodNoParametersHttpClientInitializer = new(
 		"REST004",
-		"Method must not contain parameters",
-		"The method '{0}' must not contain parameters",
+		"Method cannot contain parameters",
+		"The method '{0}' cannot contain any parameters",
 		"RestAnalyzer",
 		DiagnosticSeverity.Error,
 		true);
 
 	public static readonly DiagnosticDescriptor MethodMustBeStaticHttpClientInitializer = new(
-	"REST005",
-	"Method must be static",
-	"The method '{0}' must be static",
-	"RestAnalyzer",
-	DiagnosticSeverity.Error,
-	true);
+		"REST005",
+		"Method must be static",
+		"The method '{0}' must be static",
+		"RestAnalyzer",
+		DiagnosticSeverity.Error,
+		true);
 
-	public static readonly DiagnosticDescriptor UseOfCancellationTokenInvalid = new(
-	"REST006",
-	"Invalid use of the CancellationToken",
-	"A CancellationToken can only be provided if '{0}' returns an awaitable type",
-	"RestAnalyzer",
-	DiagnosticSeverity.Error,
+	public static readonly DiagnosticDescriptor InvalidUseOfCancellationToken = new(
+		"REST006",
+		"Invalid use of the CancellationToken",
+		"A CancellationToken should not be provided if '{0}' does not return an awaitable type",
+		"RestAnalyzer",
+		DiagnosticSeverity.Warning,
+		true);
+
+	public static readonly DiagnosticDescriptor FirstParameterMustBe = new(
+		"REST007",
+		"Invalid first parameter",
+		"The first parameter of '{0}' must be {1}",
+		"RestAnalyzer",
+		DiagnosticSeverity.Error,
 	true);
 }

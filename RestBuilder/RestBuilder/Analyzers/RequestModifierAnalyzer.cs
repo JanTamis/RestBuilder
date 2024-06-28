@@ -16,7 +16,8 @@ public class RequestModifierAnalyzer : DiagnosticAnalyzer
 {
 	public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; }
 		 = ImmutableArray.Create(
-			 DiagnosticsDescriptors.UseOfCancellationTokenInvalid);
+			 DiagnosticsDescriptors.InvalidUseOfCancellationToken,
+			 DiagnosticsDescriptors.FirstParameterMustBe);
 
 	public override void Initialize(AnalysisContext context)
 	{
@@ -38,15 +39,26 @@ public class RequestModifierAnalyzer : DiagnosticAnalyzer
 			return;
 		}
 
-		if (!method.HasAttribute(nameof(Literals.RequestModifier)))
+		if (!method.HasAttribute("RequestModifierAttribute"))
 		{
 			return;
 		}
 
-		if (method.ReturnsVoid && method.HasParameters<HttpRequestMessage, CancellationToken>())
+		if (method.Parameters.Length == 0)
 		{
-			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.FindAttributeByName(nameof(Literals.RequestModifier)), 
-				DiagnosticsDescriptors.UseOfCancellationTokenInvalid);
+			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.Identifier,
+				DiagnosticsDescriptors.FirstParameterMustBe, nameof(HttpRequestMessage));
+		}
+		else if (!method.Parameters[0].Type.IsType<HttpRequestMessage>())
+		{
+			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.ParameterList.Parameters[0],
+				DiagnosticsDescriptors.FirstParameterMustBe, nameof(HttpRequestMessage));
+		}
+
+		if (method.ReturnsVoid && method.Parameters.Length == 2 && method.Parameters[1].Type.IsType<CancellationToken>())
+		{
+			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.ParameterList.Parameters[1], 
+				DiagnosticsDescriptors.InvalidUseOfCancellationToken);
 		}
 	}
 }

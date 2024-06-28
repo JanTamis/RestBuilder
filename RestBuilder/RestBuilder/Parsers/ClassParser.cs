@@ -184,8 +184,13 @@ public static class ClassParser
 		return null;
 	}
 
-	private static TypeModel GetTypeModel(ITypeSymbol type)
+	private static TypeModel? GetTypeModel(ITypeSymbol? type)
 	{
+		if (type is null)
+		{
+			return null;
+		}
+
 		if (type is IArrayTypeSymbol arrayType)
 		{
 			var ranks = String.Concat(Enumerable.Repeat("[]", arrayType.Rank));
@@ -281,10 +286,8 @@ public static class ClassParser
 		return classSymbol
 			.GetMembers()
 			.OfType<IMethodSymbol>()
-			.Where(w => w.Parameters.Length is > 0 and <= 2 &&
-			            w.Parameters[0].Type.IsType<HttpRequestMessage>() &&
-			            w.GetAttributes(nameof(Literals.RequestModifier)).Any())
-			.OrderBy(o => o.GetAttributes(nameof(Literals.RequestModifier))
+			.Where(w => w.GetAttributes("RequestModifierAttribute").Any())
+			.OrderBy(o => o.GetAttributes("RequestModifierAttribute")
 				.Select(s => s.GetValue("Order", 0))
 				.FirstOrDefault())
 			.Select(s => new RequestModifierModel
@@ -306,7 +309,10 @@ public static class ClassParser
 			{
 				Name = s.Name,
 				ReturnTypeName = ToName(s.ReturnType),
-				ReturnType = GetTypeModel(s.ReturnType.GetAwaitableReturnType()),
+				ReturnType = s.ReturnType.IsAwaitableType() 
+					? GetTypeModel(s.ReturnType.GetAwaitableReturnType()) 
+					: GetTypeModel(s.ReturnType),
+				IsAwaitable = s.ReturnType.IsAwaitableType(),
 				ReturnNamespace = s.ReturnType?.ContainingNamespace?.ToString() ?? String.Empty,
 				Method = GetHttpMethod(s),
 				Path = s.GetAttributes()

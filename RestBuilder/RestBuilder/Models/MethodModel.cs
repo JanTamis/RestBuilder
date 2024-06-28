@@ -11,10 +11,11 @@ public record MethodModel
 	public string ReturnNamespace { get; set; }
 	
 	public bool AllowAnyStatusCode { get; set; }
-	
+	public bool IsAwaitable { get; internal set; }
+
 	public HttpMethod Method { get; set; }
 	public TypeModel ReturnType { get; set; }
 	
 	public ImmutableEquatableArray<ParameterModel> Parameters { get; set; }
-	public ImmutableEquatableArray<LocationAttributeModel> Locations { get; set; }
+	public ImmutableEquatableArray<LocationAttributeModel> Locations { get; set; }	
 }

@@ -46,7 +46,7 @@ public class HttpClientInitializerAnalyzer : DiagnosticAnalyzer
 
 		if (!method.Parameters.IsEmpty)
 		{
-			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.Identifier, 
+			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.ParameterList, 
 				DiagnosticsDescriptors.MethodNoParametersHttpClientInitializer);
 		}
 

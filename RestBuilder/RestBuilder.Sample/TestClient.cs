@@ -16,7 +16,7 @@ public partial class TestClient : IDisposable
 	[Get("{username}/User?")]
 	[Header("Authorization", "Bearer 123")]
 	[AllowAnyStatusCode]
-	public partial void GetUserAsync(
+	public partial ValueTask GetUserAsync(
 		[Path("username")] string password,
 		[QueryMap] Dictionary<string, List<int>?> name,
 		CancellationToken token);

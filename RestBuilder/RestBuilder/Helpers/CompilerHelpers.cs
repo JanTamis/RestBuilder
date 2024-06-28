@@ -53,6 +53,15 @@ public static class CompilerHelpers
 		       method.Parameters[3].Type.IsType<T4>();
 	}
 
+	public static Location GetParameterLocation<T>(this IMethodSymbol method)
+	{
+		return method.Parameters
+			.Where(w => w.Type.IsType<T>())
+			.Select(s => s.GetLocation())
+			.DefaultIfEmpty(Location.None)
+			.First()!;
+	}
+
 	public static bool HasReturnType<T>(this IMethodSymbol method)
 	{
 		return IsType<T>(method.ReturnType);
@@ -278,12 +287,14 @@ public static class CompilerHelpers
 				.Any(modifier => modifier.IsKind(SyntaxKind.PartialKeyword)));
 	}
 
-	public static Location? GetLocation(this ISymbol symbol)
+	public static Location GetLocation(this ISymbol symbol)
 	{
-		return symbol.Locations.FirstOrDefault();
+		return symbol.Locations
+			.DefaultIfEmpty(Location.None)
+			.First();
 	}
 
-	public static void ReportDiagnostic<T>(this SymbolAnalysisContext context, ISymbol symbol, Func<T, CSharpSyntaxNode?> selector, DiagnosticDescriptor descriptor) where T : CSharpSyntaxNode
+	public static void ReportDiagnostic<T>(this SymbolAnalysisContext context, ISymbol symbol, Func<T, CSharpSyntaxNode?> selector, DiagnosticDescriptor descriptor, params string[] parameters) where T : CSharpSyntaxNode
 	{
 		foreach (var syntaxReference in symbol.DeclaringSyntaxReferences)
 		{
@@ -294,11 +305,11 @@ public static class CompilerHelpers
 				continue;
 			}
 
-			context.ReportDiagnostic(Diagnostic.Create(descriptor, selector(declaration)?.GetLocation() ?? Location.None, symbol.Name));
+			context.ReportDiagnostic(Diagnostic.Create(descriptor, selector(declaration)?.GetLocation() ?? Location.None, [symbol.Name, ..parameters]));
 		}
 	}
 
-	public static void ReportDiagnostic<T>(this SymbolAnalysisContext context, ISymbol symbol, Func<T, SyntaxToken> selector, DiagnosticDescriptor descriptor) where T : CSharpSyntaxNode
+	public static void ReportDiagnostic<T>(this SymbolAnalysisContext context, ISymbol symbol, Func<T, SyntaxToken> selector, DiagnosticDescriptor descriptor, params string[] parameters) where T : CSharpSyntaxNode
 	{
 		foreach (var syntaxReference in symbol.DeclaringSyntaxReferences)
 		{
@@ -309,7 +320,22 @@ public static class CompilerHelpers
 				continue;
 			}
 
-			context.ReportDiagnostic(Diagnostic.Create(descriptor, selector(declaration).GetLocation(), symbol.Name));
+			context.ReportDiagnostic(Diagnostic.Create(descriptor, selector(declaration).GetLocation(), [symbol.Name, .. parameters]));
+		}
+	}
+
+	public static void ReportDiagnostic<T>(this SymbolAnalysisContext context, ISymbol symbol, Func<T, Location> selector, DiagnosticDescriptor descriptor, params string[] parameters) where T : CSharpSyntaxNode
+	{
+		foreach (var syntaxReference in symbol.DeclaringSyntaxReferences)
+		{
+			var syntax = syntaxReference.GetSyntax(context.CancellationToken);
+
+			if (syntax is not T declaration)
+			{
+				continue;
+			}
+
+			context.ReportDiagnostic(Diagnostic.Create(descriptor, selector(declaration), [symbol.Name, .. parameters]));
 		}
 	}
 

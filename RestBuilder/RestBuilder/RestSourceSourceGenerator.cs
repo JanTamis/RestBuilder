@@ -205,13 +205,20 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 		builder.Indentation++;
 
-		using (builder.AppendIndentation($"public partial async {returnType} {method.Name}({String.Join(", ", method.Parameters.Select(s => $"{s.Type} {s.Name}"))})"))
+		var asyncKeyword = method.IsAwaitable
+			? "async "
+			: String.Empty;
+
+		using (builder.AppendIndentation($"public partial {asyncKeyword}{returnType} {method.Name}({String.Join(", ", method.Parameters.Select(s => $"{s.Type} {s.Name}"))})"))
 		{
-			var items = method.Parameters
+			if (method.IsAwaitable)
+			{
+				var items = method.Parameters
 				.Concat<IType>(source.Properties)
 				.ToList();
 
-			WriteMethodBody(method, source.ClientName, items, source, tokenText, builder);
+				WriteMethodBody(method, source.ClientName, items, source, tokenText, builder);
+			}			
 		}
 	}
 
@@ -349,6 +356,11 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		{
 			builder.WriteLine();
 			builder.WriteLine("response.EnsureSuccessStatusCode();");
+		}
+
+		if (method.ReturnType.Namespace == "System" && method.ReturnType.Name == "Void")
+		{
+			return;
 		}
 
 		if (responseDeserializer is not null)
