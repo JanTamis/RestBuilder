@@ -248,7 +248,7 @@ public static class Literals
 		""";
 
 
-	public const string QueryAttributes = $$"""
+	public const string QueryAttribute = $$"""
 		using System;
 
 		namespace {{BaseNamespace}};
@@ -721,7 +721,7 @@ public static class Literals
 		}
 		""";
 
-	public const string RequestModifier = $$"""
+	public const string RequestModifierAttribute = $$"""
 		using System;
 		
 		namespace {{BaseNamespace}};

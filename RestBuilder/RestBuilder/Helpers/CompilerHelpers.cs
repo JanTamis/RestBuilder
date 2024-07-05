@@ -18,9 +18,19 @@ public static class CompilerHelpers
 		return symbol.GetAttributes().Where(a => a.AttributeClass?.Name == attributeName);
 	}
 
+	public static AttributeData? GetAttribute(this ISymbol symbol, string attributeName)
+	{
+		return symbol.GetAttributes(attributeName).FirstOrDefault();
+	}
+
 	public static bool HasAttribute(this ISymbol symbol, string attributeName)
 	{
 		return symbol.GetAttributes().Any(a => a.AttributeClass?.Name == attributeName);
+	}
+
+	public static bool HasAttribute(this ISymbol symbol, Func<AttributeData, bool> predicate)
+	{
+		return symbol.GetAttributes().Any(predicate);
 	}
 
 	public static bool HasParameters<T>(this IMethodSymbol method)
@@ -286,6 +296,95 @@ public static class CompilerHelpers
 			.Any(syntax => syntax.GetSyntax() is MethodDeclarationSyntax declaration && declaration.Modifiers
 				.Any(modifier => modifier.IsKind(SyntaxKind.PartialKeyword)));
 	}
+	
+	public static bool InheritsFrom<T>(this ITypeSymbol type)
+	{
+		var baseType = type.BaseType;
+
+		while (baseType != null)
+		{
+			if (baseType.IsType<T>())
+			{
+				return true;
+			}
+
+			baseType = baseType.BaseType;
+		}
+
+		return false;
+	}
+
+	public static bool Implements<T>(this ITypeSymbol typeSymbol)
+	{
+		var attributes = typeSymbol.AllInterfaces;
+		
+		foreach (var attribute in attributes)
+		{
+			if (attribute.IsType<T>())
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	public static bool Implements(this ITypeSymbol typeSymbol, string type)
+	{
+		if (typeSymbol is INamedTypeSymbol namedSymbol && namedSymbol.ConstructedFrom.ToString() == type)
+		{
+			return true;
+		}
+		
+		var attributes = typeSymbol.AllInterfaces;
+
+		foreach (var attribute in attributes)
+		{
+			if (attribute.ConstructedFrom.ToString() == type)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	public static T GetValue<T>(this AttributeData attributes, int index, T defaultValue)
+	{
+		if (attributes.ConstructorArguments.Length <= index)
+		{
+			return defaultValue;
+		}
+
+		var result = attributes.ConstructorArguments[index].Value;
+
+		if (result?.GetType() == typeof(T))
+		{
+			return (T) result;
+		}
+
+		return defaultValue;
+	}
+
+	public static T GetValue<T>(this AttributeData attributes, string name, T defaultValue)
+	{
+		if (attributes.NamedArguments.Length == 0)
+		{
+			return defaultValue;
+		}
+
+		foreach (var item in attributes.NamedArguments)
+		{
+			var result = item.Value.Value;
+
+			if (item.Key == name && result != null && result.GetType() == typeof(T))
+			{
+				return (T) result;
+			}
+		}
+
+		return defaultValue;
+	}
 
 	public static Location GetLocation(this ISymbol symbol)
 	{
@@ -294,7 +393,7 @@ public static class CompilerHelpers
 			.First();
 	}
 
-	public static void ReportDiagnostic<T>(this SymbolAnalysisContext context, ISymbol symbol, Func<T, CSharpSyntaxNode?> selector, DiagnosticDescriptor descriptor, params string[] parameters) where T : CSharpSyntaxNode
+	public static void ReportDiagnostic<T>(this SymbolAnalysisContext context, ISymbol symbol, Func<T, CSharpSyntaxNode?> selector, DiagnosticDescriptor descriptor, params object[] parameters) where T : CSharpSyntaxNode
 	{
 		foreach (var syntaxReference in symbol.DeclaringSyntaxReferences)
 		{
@@ -309,7 +408,7 @@ public static class CompilerHelpers
 		}
 	}
 
-	public static void ReportDiagnostic<T>(this SymbolAnalysisContext context, ISymbol symbol, Func<T, SyntaxToken> selector, DiagnosticDescriptor descriptor, params string[] parameters) where T : CSharpSyntaxNode
+	public static void ReportDiagnostic<T>(this SymbolAnalysisContext context, ISymbol symbol, Func<T, SyntaxToken> selector, DiagnosticDescriptor descriptor, params object[] parameters) where T : CSharpSyntaxNode
 	{
 		foreach (var syntaxReference in symbol.DeclaringSyntaxReferences)
 		{
@@ -324,7 +423,7 @@ public static class CompilerHelpers
 		}
 	}
 
-	public static void ReportDiagnostic<T>(this SymbolAnalysisContext context, ISymbol symbol, Func<T, Location> selector, DiagnosticDescriptor descriptor, params string[] parameters) where T : CSharpSyntaxNode
+	public static void ReportDiagnostic<T>(this SymbolAnalysisContext context, ISymbol symbol, Func<T, Location> selector, DiagnosticDescriptor descriptor, params object[] parameters) where T : CSharpSyntaxNode
 	{
 		foreach (var syntaxReference in symbol.DeclaringSyntaxReferences)
 		{

@@ -13,8 +13,8 @@ namespace RestBuilder.Analyzers;
 public class MethodMustBePartialAnalyzer : DiagnosticAnalyzer
 {
 	public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; }
-		 = ImmutableArray.Create(
-			 DiagnosticsDescriptors.MethodMustBePartial);
+		= ImmutableArray.Create(
+			DiagnosticsDescriptors.MethodMustBePartial);
 
 	public override void Initialize(AnalysisContext context)
 	{
@@ -26,29 +26,42 @@ public class MethodMustBePartialAnalyzer : DiagnosticAnalyzer
 
 	private void AnalyzeMethod(SymbolAnalysisContext context)
 	{
-		var method = context.Symbol as IMethodSymbol;
+		// Analyzes the method symbol from the context.
+		if (context.Symbol is not IMethodSymbol method)
+		{
+			// If the symbol is not a method, the analysis is stopped.
+			return;
+		}
+
+		// Get the HTTP method of the method symbol using the ClassParser.
 		var httpMethod = ClassParser.GetHttpMethod(method!);
 
+		// If the method's containing type does not have the 'RestClientAttribute', return early.
 		if (!method!.ContainingType.HasAttribute(nameof(Literals.RestClientAttribute)))
 		{
 			return;
 		}
 
+		// If the HTTP method is null, return early.
 		if (httpMethod is null)
 		{
 			return;
 		}
 
+		// Iterate over each syntax reference in the method's declaring syntax references.
 		foreach (var syntaxReference in method.DeclaringSyntaxReferences)
 		{
+			// Get the syntax from the syntax reference.
 			var syntax = syntaxReference.GetSyntax(context.CancellationToken);
 
+			// If the syntax is not a method declaration or if it has a 'partial' modifier, continue to the next iteration.
 			if (syntax is not MethodDeclarationSyntax methodDeclaration || methodDeclaration.Modifiers
-				.Any(modifier => modifier.IsKind(SyntaxKind.PartialKeyword)))
+				    .Any(modifier => modifier.IsKind(SyntaxKind.PartialKeyword)))
 			{
 				continue;
 			}
 
+			// If the syntax is a method declaration without a 'partial' modifier, report a diagnostic.
 			context.ReportDiagnostic(Diagnostic.Create(DiagnosticsDescriptors.MethodMustBePartial, methodDeclaration.Identifier.GetLocation(), method.Name));
 		}
 	}

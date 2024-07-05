@@ -15,9 +15,9 @@ namespace RestBuilder.Analyzers;
 public class RequestModifierAnalyzer : DiagnosticAnalyzer
 {
 	public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; }
-		 = ImmutableArray.Create(
-			 DiagnosticsDescriptors.InvalidUseOfCancellationToken,
-			 DiagnosticsDescriptors.FirstParameterMustBe);
+		= ImmutableArray.Create(
+			DiagnosticsDescriptors.InvalidUseOfCancellationToken,
+			DiagnosticsDescriptors.FirstParameterMustBe);
 
 	public override void Initialize(AnalysisContext context)
 	{
@@ -29,35 +29,46 @@ public class RequestModifierAnalyzer : DiagnosticAnalyzer
 
 	private void AnalyzeMethod(SymbolAnalysisContext context)
 	{
+		// Check if the symbol is an IMethodSymbol, if not, exit the function.
 		if (context.Symbol is not IMethodSymbol method)
 		{
 			return;
 		}
-		
+
+		// Check if the method's containing type has the `RestClientAttribute` attribute.
+		// If it doesn't, exit the function.
 		if (!method!.ContainingType.HasAttribute(nameof(Literals.RestClientAttribute)))
 		{
 			return;
 		}
 
-		if (!method.HasAttribute("RequestModifierAttribute"))
+		// Check if the method has the `RequestModifierAttribute` attribute.
+		// If it doesn't, exit the function.
+		if (!method.HasAttribute(nameof(Literals.RequestModifierAttribute)))
 		{
 			return;
 		}
 
+		// Check if the method has any parameters.
+		// If it doesn't, report a diagnostic that the first parameter must be of type `HttpRequestMessage`.
 		if (method.Parameters.Length == 0)
 		{
 			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.Identifier,
 				DiagnosticsDescriptors.FirstParameterMustBe, nameof(HttpRequestMessage));
 		}
+		// If the method has parameters, check if the first parameter is of type `HttpRequestMessage`.
+		// If it's not, report a diagnostic that the first parameter must be of type `HttpRequestMessage`.
 		else if (!method.Parameters[0].Type.IsType<HttpRequestMessage>())
 		{
 			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.ParameterList.Parameters[0],
 				DiagnosticsDescriptors.FirstParameterMustBe, nameof(HttpRequestMessage));
 		}
 
-		if (method.ReturnsVoid && method.Parameters.Length == 2 && method.Parameters[1].Type.IsType<CancellationToken>())
+		// Check if the method returns void and has exactly two parameters, and if the second parameter is of type `CancellationToken`.
+		// If these conditions are met, report a diagnostic that the use of `CancellationToken` is invalid.
+		if (method is { ReturnsVoid: true, Parameters.Length: 2 } && method.Parameters[1].Type.IsType<CancellationToken>())
 		{
-			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.ParameterList.Parameters[1], 
+			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.ParameterList.Parameters[1],
 				DiagnosticsDescriptors.InvalidUseOfCancellationToken);
 		}
 	}

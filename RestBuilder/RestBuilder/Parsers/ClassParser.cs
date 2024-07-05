@@ -87,43 +87,6 @@ public static class ClassParser
 		return type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
 	}
 
-	private static T GetValue<T>(this AttributeData attributes, int index, T defaultValue)
-	{
-		if (attributes.ConstructorArguments.Length <= index)
-		{
-			return defaultValue;
-		}
-
-		var result = attributes.ConstructorArguments[index].Value;
-
-		if (result?.GetType() == typeof(T))
-		{
-			return (T) result;
-		}
-
-		return defaultValue;
-	}
-
-	private static T GetValue<T>(this AttributeData attributes, string name, T defaultValue)
-	{
-		if (attributes.NamedArguments.Length == 0)
-		{
-			return defaultValue;
-		}
-
-		foreach (var item in attributes.NamedArguments)
-		{
-			var result = item.Value.Value;
-
-			if (item.Key == name && result != null && result.GetType() == typeof(T))
-			{
-				return (T) result;
-			}
-		}
-
-		return defaultValue;
-	}
-
 	private static LocationAttributeModel GetLocationAttribute(ImmutableArray<AttributeData> attributes, HttpLocation defaultLocation)
 	{
 		return GetLocationAttributes(attributes, defaultLocation)
@@ -141,7 +104,7 @@ public static class ClassParser
 			{
 				Location = y.AttributeClass?.Name switch
 				{
-					nameof(Literals.QueryAttributes)         => HttpLocation.Query,
+					nameof(Literals.QueryAttribute)         => HttpLocation.Query,
 					nameof(Literals.HeaderAttribute)         => HttpLocation.Header,
 					nameof(Literals.PathAttribute)           => HttpLocation.Path,
 					nameof(Literals.BodyAttribute)           => HttpLocation.Body,

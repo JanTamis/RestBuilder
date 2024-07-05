@@ -26,7 +26,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 	{
 		RegisterSource(nameof(Literals.BaseAddressAttribute), Literals.AttributeSourceCode);
 		RegisterSource(nameof(Literals.RequestAttributes), Literals.RequestAttributes);
-		RegisterSource(nameof(Literals.QueryAttributes), Literals.QueryAttributes);
+		RegisterSource(nameof(Literals.QueryAttribute), Literals.QueryAttribute);
 		RegisterSource(nameof(Literals.QuerySerializationMethod), Literals.QuerySerializationMethod);
 		RegisterSource(nameof(Literals.AllowAnyStatusCodeAttribute), Literals.AllowAnyStatusCodeAttribute);
 		RegisterSource(nameof(Literals.HeaderAttribute), Literals.HeaderAttribute);
@@ -35,7 +35,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		RegisterSource(nameof(Literals.RestClientAttribute), Literals.RestClientAttribute);
 		RegisterSource(nameof(Literals.QueryMapAttribute), Literals.QueryMapAttribute);
 		RegisterSource(nameof(Literals.RawQueryStringAttribute), Literals.RawQueryStringAttribute);
-		RegisterSource(nameof(Literals.RequestModifier), Literals.RequestModifier);
+		RegisterSource(nameof(Literals.RequestModifierAttribute), Literals.RequestModifierAttribute);
 		RegisterSource(nameof(Literals.ResponseDeserializerAttribute), Literals.ResponseDeserializerAttribute);
 		RegisterSource(nameof(Literals.RequestBodySerializerAttribute), Literals.RequestBodySerializerAttribute);
 		RegisterSource(nameof(Literals.HttpClientInitializerAttribute), Literals.HttpClientInitializerAttribute);
@@ -43,7 +43,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		var classes = context.SyntaxProvider
 			.ForAttributeWithMetadataName(
 				$"{Literals.BaseNamespace}.{nameof(Literals.RestClientAttribute)}",
-				(node, token) => node is ClassDeclarationSyntax classDeclaration && classDeclaration.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)),
+				(node, token) => !token.IsCancellationRequested && node is ClassDeclarationSyntax classDeclaration && classDeclaration.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)),
 				GenerateSource);
 
 		context.RegisterSourceOutput(classes, static (spc, source) => Execute(source, spc));
@@ -58,7 +58,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 	private static ClassModel? GenerateSource(GeneratorAttributeSyntaxContext context, CancellationToken token)
 	{
-		if (context is { TargetNode: ClassDeclarationSyntax classDeclarationSyntax, TargetSymbol: INamedTypeSymbol namedTypeSymbol })
+		if (!token.IsCancellationRequested && context is { TargetNode: ClassDeclarationSyntax classDeclarationSyntax, TargetSymbol: INamedTypeSymbol namedTypeSymbol })
 		{
 			return ClassParser.Parse(classDeclarationSyntax, namedTypeSymbol, context.Attributes, context.SemanticModel.Compilation);
 		}
@@ -103,7 +103,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			.Distinct()
 			.OrderBy(o => o)
 			.Select(s => $"using {s};");
-
+		
 		foreach (var @namespace in namespaces)
 		{
 			builder.WriteLine(@namespace);
