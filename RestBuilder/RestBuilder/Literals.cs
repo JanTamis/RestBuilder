@@ -782,4 +782,15 @@ public static class Literals
 		{
 		}
 		""";
+
+	public const string RequestQueryParamSerializerAttribute = $$"""
+		using System;
+
+		namespace {{BaseNamespace}};
+
+		[AttributeUsage(AttributeTargets.Method, Inherited = false, AllowMultiple = false)]
+		public sealed class RequestQueryParamSerializerAttribute : Attribute
+		{
+		}
+		""";
 }

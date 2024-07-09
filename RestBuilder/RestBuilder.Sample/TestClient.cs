@@ -9,10 +9,16 @@ using System.Threading.Tasks;
 namespace RestBuilder.Sample;
 
 [RestClient("Client")]
-[BaseAddress("http://api.example.com")]
+[BaseAddress("https://api.example.com")]
 [AllowAnyStatusCode]
-public partial class TestClient // : IDisposable
+public partial class TestClient : IDisposable
 {
+	[RequestQueryParamSerializer]
+	public IEnumerable<KeyValuePair<string, string>> SerializeParameter<TKey, TValue>(TKey key, TValue value)
+	{
+		yield break;
+	}
+	
 	[Get("{username}/User?")]
 	[Header("Authorization", "Bearer 123")]
 	[AllowAnyStatusCode]
@@ -23,31 +29,21 @@ public partial class TestClient // : IDisposable
 		CancellationToken token);
 
 	[RequestModifier]
-	private static void LogRequest(HttpRequestMessage request, CancellationToken token)
+	private static void LogRequest(HttpRequestMessage request)
 	{
 		Console.WriteLine(request.ToString());
-  }
-	 
+	}
+
 	[ResponseDeserializer]
-	private async static ValueTask<T?> ParseAsync<T>(HttpResponseMessage response, CancellationToken token)
+	private static Task<string> ParseAsync(HttpResponseMessage response, CancellationToken token)
 	{
-		return await response.Content.ReadFromJsonAsync<T>(token);
+		return response.Content.ReadAsStringAsync(token);
 	}
 
 	[RequestBodySerializer]
-	private HttpContent Serialize<T>(T body, CancellationToken token)
+	private HttpContent SerializeString(string body)
 	{
-		if (typeof(T) == typeof(String))
-		{
-			return new StringContent((String)(object)body);
-		}
-		
-		if (typeof(T) == typeof(Stream))
-		{
-			return new StreamContent((Stream)(object)body);
-		}
-		
-		return JsonContent.Create(body);
+		return new StringContent(body);
 	}
 
 	// [HttpClientInitializer]

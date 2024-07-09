@@ -7,3 +7,14 @@ public record RequestModifierModel
 
 	public string Name { get; set; }
 }
+
+public record RequestQueryParamSerializerModel
+{
+	public bool HasFormat { get; set; }
+	
+	public bool HasFormatProvider { get; set; }
+	
+	public bool IsCollection { get; set; }
+	
+	public string Name { get; set; }
+}

@@ -66,27 +66,27 @@ public class RequestBodySerializer : DiagnosticAnalyzer
 		}
 
 		// If the method is not generic, report a diagnostic that it must have one generic parameter.
-		if (!method.IsGenericMethod)
-		{
-			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.Identifier,
-				DiagnosticsDescriptors.MustHaveXGenericParameters, 1);
-		}
+		// if (!method.IsGenericMethod)
+		// {
+		// 	context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.Identifier,
+		// 		DiagnosticsDescriptors.MustHaveXGenericParameters, 1);
+		// }
 		// If the method is generic but does not have exactly one type argument, report a diagnostic.
-		else if (method.TypeArguments.Length != 1)
+		if (method.IsGenericMethod && method.TypeArguments.Length != 1)
 		{
 			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.TypeParameterList,
 				DiagnosticsDescriptors.MustHaveXGenericParameters, 1);
 		}
 
 		// If the method does not return HttpContent or a task of HttpContent, report a diagnostic.
-		if (!method.ReturnType.IsType<HttpContent>() && !method.ReturnType.GetAwaitableReturnType().IsType<HttpContent>())
+		if (!method.ReturnType.IsType<HttpContent>(context.Compilation) && !method.ReturnType.GetAwaitableReturnType().IsType<HttpContent>(context.Compilation))
 		{
 			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.ReturnType,
 				DiagnosticsDescriptors.MethodMustReturnType, nameof(HttpContent));
 		}
 
 		// If the method has two parameters and the second one is a CancellationToken, report a diagnostic.
-		if (method.Parameters.Length == 2 && method.Parameters[1].Type.IsType<CancellationToken>())
+		if (method.Parameters.Length == 2 && method.Parameters[1].Type.IsType<CancellationToken>(context.Compilation))
 		{
 			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.ParameterList.Parameters[1],
 				DiagnosticsDescriptors.InvalidUseOfCancellationToken);

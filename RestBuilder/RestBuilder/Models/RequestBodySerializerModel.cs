@@ -6,4 +6,6 @@ public record RequestBodySerializerModel
 	public bool IsAsync { get; set; }
 
 	public string Name { get; set; }
+	
+	public TypeModel? Type { get; set; }
 }

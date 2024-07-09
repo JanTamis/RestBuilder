@@ -48,7 +48,7 @@ public class HttpClientInitializerAnalyzer : DiagnosticAnalyzer
 		}
 
 		// Checks if the method has a return type of HttpClient.
-		if (!method.HasReturnType<HttpClient>())
+		if (!method.HasReturnType<HttpClient>(context.Compilation))
 		{
 			// If the method does not return a HttpClient, a diagnostic is reported.
 			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.ReturnType,

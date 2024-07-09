@@ -10,6 +10,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using RestBuilder.Enumerators;
 using RestBuilder.Helpers;
+using RestBuilder.Interfaces;
 using RestBuilder.Models;
 using TypeShape.Roslyn;
 
@@ -31,13 +32,14 @@ public static class ClassParser
 			Name = className,
 			Namespace = namespaceName,
 			IsStatic = classDeclaration.Modifiers.Any(SyntaxKind.StaticKeyword),
-			IsDisposable = IsDisposable(classSymbol),
+			IsDisposable = IsDisposable(classSymbol, compilation),
 			ClientName = clientName!,
-			NeedsClient = !GetNeedsClient(classSymbol, clientName),
-			ResponseDeserializer = GetResponseDeserializer(classSymbol),
-			RequestBodySerializer = GetRequestBodySerializer(classSymbol),
-			RequestModifiers = GetRequestModifiers(classSymbol),
-			HttpClientInitializer = GetHttpClientInitializer(classSymbol),
+			NeedsClient = !GetNeedsClient(classSymbol, clientName, compilation),
+			ResponseDeserializers = GetResponseDeserializers(classSymbol, compilation),
+			RequestBodySerializers = GetRequestBodySerializers(classSymbol, compilation),
+			RequestModifiers = GetRequestModifiers(classSymbol, compilation),
+			RequestQueryParamSerializers = GetRequestQueryParamSerializerModels(classSymbol, compilation),
+			HttpClientInitializer = GetHttpClientInitializer(classSymbol, compilation),
 			BaseAddress = baseAddress,
 			Attributes = GetLocationAttributes(classSymbol.GetAttributes(), HttpLocation.None)
 				.ToImmutableEquatableArray(),
@@ -47,7 +49,7 @@ public static class ClassParser
 
 		return source;
 	}
-	
+
 	public static ITypeSymbol? GetTaskTypeArgument(ITypeSymbol typeSymbol, Compilation compilation)
 	{
 		if (typeSymbol.IsTaskType(compilation))
@@ -104,7 +106,7 @@ public static class ClassParser
 			{
 				Location = y.AttributeClass?.Name switch
 				{
-					nameof(Literals.QueryAttribute)         => HttpLocation.Query,
+					nameof(Literals.QueryAttribute)          => HttpLocation.Query,
 					nameof(Literals.HeaderAttribute)         => HttpLocation.Header,
 					nameof(Literals.PathAttribute)           => HttpLocation.Path,
 					nameof(Literals.BodyAttribute)           => HttpLocation.Body,
@@ -119,7 +121,7 @@ public static class ClassParser
 			});
 	}
 
-	private static TypeModel? GetCollectionItemType(ITypeSymbol type)
+	private static TypeModel? GetCollectionItemType(ITypeSymbol type, Compilation compilation)
 	{
 		if (type.ContainingNamespace?.ToString() == "System" && type.Name == nameof(String))
 		{
@@ -128,26 +130,26 @@ public static class ClassParser
 
 		if (type is IArrayTypeSymbol arrayTypeSymbol)
 		{
-			return GetTypeModel(arrayTypeSymbol.ElementType);
+			return GetTypeModel(arrayTypeSymbol.ElementType, compilation);
 		}
 
 		foreach (var @interface in type.AllInterfaces)
 		{
 			if (@interface.ContainingNamespace?.ToString() == "System.Collections.Generic" && @interface.Name == nameof(IEnumerable))
 			{
-				return GetTypeModel(@interface.TypeArguments[0]);
+				return GetTypeModel(@interface.TypeArguments[0], compilation);
 			}
 		}
 
 		if (type.ContainingNamespace?.ToString() == "System.Collections.Generic" && type.Name == nameof(IEnumerable) && type is INamedTypeSymbol namedTypeSymbol)
 		{
-			return GetTypeModel(namedTypeSymbol.TypeArguments[0]);
+			return GetTypeModel(namedTypeSymbol.TypeArguments[0], compilation);
 		}
 
 		return null;
 	}
 
-	private static TypeModel? GetTypeModel(ITypeSymbol? type)
+	private static TypeModel? GetTypeModel(ITypeSymbol? type, Compilation compilation)
 	{
 		if (type is null)
 		{
@@ -165,8 +167,9 @@ public static class ClassParser
 				NullableAnnotation = type.NullableAnnotation,
 				IsCollection = true,
 				Namespace = "System",
-				CollectionType = GetCollectionItemType(type),
+				CollectionType = GetCollectionItemType(type, compilation),
 				Type = $"{ToName(arrayType.ElementType)}{ranks}",
+				IsGeneric = arrayType.ElementType is INamedTypeSymbol { IsGenericType: true }
 			};
 		}
 
@@ -175,76 +178,79 @@ public static class ClassParser
 			Name = type.Name,
 			IsNullable = type.IsReferenceType,
 			NullableAnnotation = type.NullableAnnotation,
-			IsCollection = type.IsCollection(),
+			IsCollection = type.IsCollection(compilation),
 			Namespace = type.ContainingNamespace?.ToString() ?? String.Empty,
-			CollectionType = GetCollectionItemType(type),
+			CollectionType = GetCollectionItemType(type, compilation),
 			Type = ToName(type),
+			IsGeneric = type is ITypeParameterSymbol or INamedTypeSymbol { IsGenericType: true },
 		};
 	}
 
-	private static IEnumerable<TypeModel> GetGenericTypes(ITypeSymbol type)
+	private static IEnumerable<TypeModel> GetGenericTypes(ITypeSymbol type, Compilation compilation)
 	{
 		foreach (var @interface in type.AllInterfaces)
 		{
 			if (@interface.ContainingNamespace?.ToString() == "System.Collections.Generic" && @interface.Name == nameof(IDictionary))
 			{
-				return @interface.TypeArguments.Select(GetTypeModel);
+				return @interface.TypeArguments.Select(s => GetTypeModel(s, compilation));
 			}
 		}
 
 		if (type is INamedTypeSymbol { TypeArguments.Length: > 0 } namedTypeSymbol)
 		{
-			return namedTypeSymbol.TypeArguments.Select(GetTypeModel);
+			return namedTypeSymbol.TypeArguments.Select(s => GetTypeModel(s, compilation));
 		}
 
 		return Enumerable.Empty<TypeModel>();
 	}
 
-	private static bool IsDisposable(ITypeSymbol classSymbol)
+	private static bool IsDisposable(ITypeSymbol classSymbol, Compilation compilation)
 	{
-		return classSymbol.AllInterfaces.Any(a => a.IsType<IDisposable>()) &&
+		return classSymbol.AllInterfaces.Any(a => a.IsType<IDisposable>(compilation)) &&
 		       !classSymbol
 			       .GetMembers()
 			       .OfType<IMethodSymbol>()
 			       .Any(a => !a.IsPartialDefinition && a is { ReturnsVoid: true, Parameters.IsEmpty: true, Name: nameof(IDisposable.Dispose) });
 	}
 
-	private static ResponseDeserializerModel? GetResponseDeserializer(INamedTypeSymbol classSymbol)
+	private static ImmutableEquatableArray<ResponseDeserializerModel> GetResponseDeserializers(INamedTypeSymbol classSymbol, Compilation compilation)
 	{
 		return classSymbol
 			.GetMembers()
 			.OfType<IMethodSymbol>()
-			.Where(w => w.GetAttributes(nameof(Literals.ResponseDeserializerAttribute)).Any() && (w.ReturnType is { TypeKind: TypeKind.TypeParameter } || w.ReturnType.IsAwaitableType() && w.ReturnType.GetAwaitableReturnType() is { TypeKind: TypeKind.TypeParameter }) &&
-			            (w.HasParameters<HttpResponseMessage>() ||
-			             w.HasParameters<HttpResponseMessage, CancellationToken>()) &&
-			            w.TypeArguments.Length == 1)
+			.Where(w => w.GetAttributes(nameof(Literals.ResponseDeserializerAttribute)).Any() &&
+			            (w.HasParameters<HttpResponseMessage>(compilation) ||
+			             w.HasParameters<HttpResponseMessage, CancellationToken>(compilation) &&
+			            (!w.IsGenericMethod || w.TypeArguments.Length == 1)))
 			.Select(s => new ResponseDeserializerModel
 			{
 				Name = s.Name,
 				IsAsync = s.ReturnType.IsAwaitableType(),
-				HasCancellation = s.HasParameters<HttpResponseMessage, CancellationToken>(),
+				HasCancellation = s.HasParameters<HttpResponseMessage, CancellationToken>(compilation),
+				Type = GetTypeModel(s.ReturnType.GetAwaitableReturnType() ?? s.ReturnType, compilation),
 			})
-			.FirstOrDefault();
+			.ToImmutableEquatableArray();
 	}
 
-	private static RequestBodySerializerModel? GetRequestBodySerializer(INamedTypeSymbol classSymbol)
+	private static ImmutableEquatableArray<RequestBodySerializerModel> GetRequestBodySerializers(INamedTypeSymbol classSymbol, Compilation compilation)
 	{
 		return classSymbol
 			.GetMembers()
 			.OfType<IMethodSymbol>()
 			.Where(w => w.GetAttributes(nameof(Literals.RequestBodySerializerAttribute)).Any() &&
-			            (w.ReturnType.IsType<HttpContent>() || w.ReturnType.GetAwaitableReturnType()?.IsType<HttpContent>() == true) &&
-			            w.Parameters.Length is 1 or 2 && w.Parameters[0].Type.TypeKind == TypeKind.TypeParameter)
+			            (w.ReturnType.IsType<HttpContent>(compilation) || w.ReturnType.GetAwaitableReturnType()?.IsType<HttpContent>(compilation) == true) &&
+			            w.Parameters.Length is 1 or 2)
 			.Select(s => new RequestBodySerializerModel
 			{
 				Name = s.Name,
+				Type = GetTypeModel(s.Parameters[0].Type, compilation),
 				IsAsync = s.ReturnType.IsAwaitableType(),
-				HasCancellation = s.Parameters.Length > 1 && s.Parameters[1].Type.IsType<CancellationToken>(),
+				HasCancellation = s.Parameters.Length > 1 && s.Parameters[1].Type.IsType<CancellationToken>(compilation),
 			})
-			.FirstOrDefault();
+			.ToImmutableEquatableArray();
 	}
 
-	private static ImmutableEquatableArray<RequestModifierModel> GetRequestModifiers(INamedTypeSymbol classSymbol)
+	private static ImmutableEquatableArray<RequestModifierModel> GetRequestModifiers(INamedTypeSymbol classSymbol, Compilation compilation)
 	{
 		return classSymbol
 			.GetMembers()
@@ -257,7 +263,7 @@ public static class ClassParser
 			{
 				Name = s.Name,
 				IsAsync = s.ReturnType.IsAwaitableType(),
-				HasCancellation = s.Parameters.Length > 1 && s.Parameters[1].Type.IsType<CancellationToken>(),
+				HasCancellation = s.Parameters.Length > 1 && s.Parameters[1].Type.IsType<CancellationToken>(compilation),
 			})
 			.ToImmutableEquatableArray();
 	}
@@ -272,9 +278,9 @@ public static class ClassParser
 			{
 				Name = s.Name,
 				ReturnTypeName = ToName(s.ReturnType),
-				ReturnType = s.ReturnType.IsAwaitableType() 
-					? GetTypeModel(s.ReturnType.GetAwaitableReturnType()) 
-					: GetTypeModel(s.ReturnType),
+				ReturnType = s.ReturnType.IsAwaitableType()
+					? GetTypeModel(s.ReturnType.GetAwaitableReturnType(), compilation)
+					: GetTypeModel(s.ReturnType, compilation),
 				IsAwaitable = s.ReturnType.IsAwaitableType(),
 				ReturnNamespace = s.ReturnType?.ContainingNamespace?.ToString() ?? String.Empty,
 				Method = GetHttpMethod(s),
@@ -295,9 +301,9 @@ public static class ClassParser
 						NullableAnnotation = x.NullableAnnotation,
 						Namespace = x.Type.ContainingNamespace?.ToString() ?? String.Empty,
 						Location = GetLocationAttribute(x.GetAttributes(), HttpLocation.Query),
-						GenericTypes = GetGenericTypes(x.Type).ToImmutableEquatableArray(),
-						IsCollection = x.Type.IsCollection(),
-						CollectionItemType = GetCollectionItemType(x.Type)
+						GenericTypes = GetGenericTypes(x.Type, compilation).ToImmutableEquatableArray(),
+						IsCollection = x.Type.IsCollection(compilation),
+						CollectionItemType = GetCollectionItemType(x.Type, compilation)
 					})
 					.ToImmutableEquatableArray(),
 				AllowAnyStatusCode = s.GetAttributes("AllowAnyStatusCodeAttribute")
@@ -306,12 +312,12 @@ public static class ClassParser
 			})
 			.ToImmutableEquatableArray();
 	}
-	
-	private static bool GetNeedsClient(INamedTypeSymbol classSymbol, string? clientName)
+
+	private static bool GetNeedsClient(INamedTypeSymbol classSymbol, string? clientName, Compilation compilation)
 	{
 		return classSymbol
 			.GetMembers()
-			.Any(w => w.Name == clientName && (w is IFieldSymbol field && field.Type.IsType<HttpClient>() || w is IPropertySymbol propery && propery.Type.IsType<HttpClient>()));
+			.Any(w => w.Name == clientName && (w is IFieldSymbol field && field.Type.IsType<HttpClient>(compilation) || w is IPropertySymbol propery && propery.Type.IsType<HttpClient>(compilation)));
 	}
 
 	private static ImmutableEquatableArray<PropertyModel> GetProperties(INamedTypeSymbol classSymbol)
@@ -357,11 +363,11 @@ public static class ClassParser
 			.FirstOrDefault();
 	}
 
-	private static string? GetHttpClientInitializer(INamedTypeSymbol classSymbol)
+	private static string? GetHttpClientInitializer(INamedTypeSymbol classSymbol, Compilation compilation)
 	{
 		return classSymbol
 			.GetMethods()
-			.Where(w => w.IsStatic && w.HasAttribute("HttpClientInitializerAttribute") && w.Parameters.Length == 0 && w.HasReturnType<HttpClient>())
+			.Where(w => w.IsStatic && w.HasAttribute("HttpClientInitializerAttribute") && w.Parameters.Length == 0 && w.HasReturnType<HttpClient>(compilation))
 			.Select(s => s.Name)
 			.FirstOrDefault();
 	}
@@ -373,5 +379,42 @@ public static class ClassParser
 			.Where(IsValidHttpMethod)
 			.Select(x => new HttpMethod(x))
 			.FirstOrDefault();
+	}
+
+	private static ImmutableEquatableArray<RequestQueryParamSerializerModel> GetRequestQueryParamSerializerModels(INamedTypeSymbol classSymbol, Compilation compilation)
+	{
+		return classSymbol
+			.GetMethods()
+			.Where(w => w.HasAttribute(nameof(Literals.RequestQueryParamSerializerAttribute)) 
+			            && w.ReturnType.IsType<IEnumerable<KeyValuePair<string, string>>>(compilation)
+			            && w.TypeArguments.Length == 2
+			            && w.Parameters.Length >= 2
+			            && SymbolEqualityComparer.Default.Equals(w.Parameters[0].Type, w.TypeArguments[0])
+			            && (SymbolEqualityComparer.Default.Equals(w.Parameters[1].Type, w.TypeArguments[1]) 
+			                || SymbolEqualityComparer.Default.Equals(w.Parameters[1].Type.GetCollectionType(compilation), w.TypeArguments[1])))
+			.Select(s => new RequestQueryParamSerializerModel
+			{
+				Name = s.Name,
+				IsCollection = SymbolEqualityComparer.Default.Equals(s.Parameters[1].Type.GetCollectionType(compilation), s.TypeArguments[1]),
+			})
+			.ToImmutableEquatableArray();
+	}
+
+	public static bool TypeEquals(IType? x, IType? y)
+	{
+		if (x is null && y is null)
+		{
+			return true;
+		}
+
+		if (x is null || y is null)
+		{
+			return false;
+		}
+
+		return x.Type == y.Type &&
+		       x.Namespace == y.Namespace &&
+		       x.NullableAnnotation == y.NullableAnnotation &&
+		       x.IsNullable == y.IsNullable;
 	}
 }

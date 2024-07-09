@@ -74,9 +74,9 @@ public class EndPointAnalyzer : DiagnosticAnalyzer
 			// Checks if the parameter's type is not CancellationToken and if the parameter does not have an attribute 
 			// whose class is not CancellationToken, is in the "RestBuilder" namespace, and whose name is contained in the HttpParameterTypes set.
 			// If these conditions are met, a diagnostic is reported for the parameter, indicating that the location of the parameter is not defined by an attribute.
-			if (!parameter.Type.IsType<CancellationToken>() &&
+			if (!parameter.Type.IsType<CancellationToken>(context.Compilation) &&
 			    !parameter.HasAttribute(h => h.AttributeClass is not null && 
-			                                 !h.AttributeClass.IsType<CancellationToken>() &&
+			                                 !h.AttributeClass.IsType<CancellationToken>(context.Compilation) &&
 			                                 h.AttributeClass.ContainingNamespace?.ToString() == Literals.BaseNamespace &&
 			                                 HttpParameterTypes.Contains(h.AttributeClass.Name)))
 			{

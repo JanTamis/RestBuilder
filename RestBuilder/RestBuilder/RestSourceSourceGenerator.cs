@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using Microsoft.CodeAnalysis;
@@ -24,21 +25,22 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 {
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
-		RegisterSource(nameof(Literals.BaseAddressAttribute), Literals.AttributeSourceCode);
-		RegisterSource(nameof(Literals.RequestAttributes), Literals.RequestAttributes);
-		RegisterSource(nameof(Literals.QueryAttribute), Literals.QueryAttribute);
-		RegisterSource(nameof(Literals.QuerySerializationMethod), Literals.QuerySerializationMethod);
-		RegisterSource(nameof(Literals.AllowAnyStatusCodeAttribute), Literals.AllowAnyStatusCodeAttribute);
-		RegisterSource(nameof(Literals.HeaderAttribute), Literals.HeaderAttribute);
-		RegisterSource(nameof(Literals.PathAttribute), Literals.PathAttribute);
-		RegisterSource(nameof(Literals.BodyAttribute), Literals.BodyAttribute);
-		RegisterSource(nameof(Literals.RestClientAttribute), Literals.RestClientAttribute);
-		RegisterSource(nameof(Literals.QueryMapAttribute), Literals.QueryMapAttribute);
-		RegisterSource(nameof(Literals.RawQueryStringAttribute), Literals.RawQueryStringAttribute);
-		RegisterSource(nameof(Literals.RequestModifierAttribute), Literals.RequestModifierAttribute);
-		RegisterSource(nameof(Literals.ResponseDeserializerAttribute), Literals.ResponseDeserializerAttribute);
-		RegisterSource(nameof(Literals.RequestBodySerializerAttribute), Literals.RequestBodySerializerAttribute);
-		RegisterSource(nameof(Literals.HttpClientInitializerAttribute), Literals.HttpClientInitializerAttribute);
+		RegisterSource(Literals.AttributeSourceCode);
+		RegisterSource(Literals.RequestAttributes);
+		RegisterSource(Literals.QueryAttribute);
+		RegisterSource(Literals.QuerySerializationMethod);
+		RegisterSource(Literals.AllowAnyStatusCodeAttribute);
+		RegisterSource(Literals.HeaderAttribute);
+		RegisterSource(Literals.PathAttribute);
+		RegisterSource(Literals.BodyAttribute);
+		RegisterSource(Literals.RestClientAttribute);
+		RegisterSource(Literals.QueryMapAttribute);
+		RegisterSource(Literals.RawQueryStringAttribute);
+		RegisterSource(Literals.RequestModifierAttribute);
+		RegisterSource(Literals.ResponseDeserializerAttribute);
+		RegisterSource(Literals.RequestBodySerializerAttribute);
+		RegisterSource(Literals.HttpClientInitializerAttribute);
+		RegisterSource(Literals.RequestQueryParamSerializerAttribute);
 
 		var classes = context.SyntaxProvider
 			.ForAttributeWithMetadataName(
@@ -48,10 +50,10 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 		context.RegisterSourceOutput(classes, static (spc, source) => Execute(source, spc));
 
-		void RegisterSource(string attributeName, string sourceCode)
+		void RegisterSource(string sourceCode, [CallerArgumentExpression(nameof(sourceCode))] string attributeName = null)
 		{
 			context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
-				$"{attributeName}.g.cs",
+				$"{attributeName.Split('.')[^1]}.g.cs",
 				SourceText.From(sourceCode, Encoding.UTF8)));
 		}
 	}
@@ -260,7 +262,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			WriteMethodBodyWithHeaders(method, clientName, items, tokenText, headers, methodDefaultItems.ToDictionary(t => t.Name ?? String.Empty, t => t), bodies.FirstOrDefault(), classModel, builder);
 		}
 
-		WriteMethodReturn(method, classModel.ResponseDeserializer, tokenText, builder);
+		WriteMethodReturn(method, classModel.ResponseDeserializers, tokenText, builder);
 
 		var optionalQueries = items
 			.Where(w => w.Location.Location == HttpLocation.Query && w is { IsNullable: true, NullableAnnotation: NullableAnnotation.Annotated } || w.Location.Location == HttpLocation.QueryMap || (w.Location.Location == HttpLocation.Raw && w.IsNullable))
@@ -350,7 +352,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 	}
 
 
-	private static void WriteMethodReturn(MethodModel method, ResponseDeserializerModel? responseDeserializer, string tokenText, SourceWriter builder)
+	private static void WriteMethodReturn(MethodModel method, ImmutableEquatableArray<ResponseDeserializerModel> responseDeserializers, string tokenText, SourceWriter builder)
 	{
 		if (!method.AllowAnyStatusCode)
 		{
@@ -358,32 +360,47 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			builder.WriteLine("response.EnsureSuccessStatusCode();");
 		}
 
-		if (method.ReturnType.Namespace == "System" && method.ReturnType.Name == "Void")
+		if (method.ReturnType is { Namespace: "System", Name: "Void" })
 		{
 			return;
 		}
 
-		if (responseDeserializer is not null)
+		foreach (var deserializer in responseDeserializers)
 		{
-			if (!String.IsNullOrEmpty(method.ReturnTypeName))
+			if (deserializer is { Type.IsGeneric: false } && ClassParser.TypeEquals(method.ReturnType, deserializer.Type))
 			{
-				builder.WriteLine();
-				var awaitPrefix = responseDeserializer.IsAsync
+				var awaitPrefix = deserializer.IsAsync
 					? "await "
 					: String.Empty;
 
-				var cancellationTokenSuffix = responseDeserializer.HasCancellation
+				var cancellationTokenSuffix = deserializer.HasCancellation
 					? $", {tokenText}"
 					: String.Empty;
 
-				builder.WriteLine($"return {awaitPrefix}{responseDeserializer.Name}<{method.ReturnType.Name}>(response{cancellationTokenSuffix});");
-			}
-			else
-			{
-				builder.WriteLine($"return await response.Content.ReadFromJsonAsync<{method.ReturnType.Name}>({tokenText});");
-			}
+				builder.WriteLine();
+				builder.WriteLine($"return {awaitPrefix}{deserializer.Name}(response{cancellationTokenSuffix});");
 
-			return;
+				return;
+			}
+		}
+
+		foreach (var deserializer in responseDeserializers)
+		{
+			if (deserializer is { Type.IsGeneric: true })
+			{
+				var awaitPrefix = deserializer.IsAsync
+					? "await "
+					: String.Empty;
+
+				var cancellationTokenSuffix = deserializer.HasCancellation
+					? $", {tokenText}"
+					: String.Empty;
+
+				builder.WriteLine();
+				builder.WriteLine($"return {awaitPrefix}{deserializer.Name}<{method.ReturnType.Name}>(response{cancellationTokenSuffix});");
+
+				return;
+			}
 		}
 
 		builder.WriteLine();

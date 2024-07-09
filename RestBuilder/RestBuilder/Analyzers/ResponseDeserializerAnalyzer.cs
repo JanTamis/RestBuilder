@@ -66,13 +66,7 @@ public class ResponseDeserializerAnalyzer : DiagnosticAnalyzer
 		}
 
 		// If the method is not generic, report a diagnostic that it must have 1 generic parameter
-		if (!method.IsGenericMethod)
-		{
-			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.Identifier,
-				DiagnosticsDescriptors.MustHaveXGenericParameters, 1);
-		}
-		// If the method is generic but does not have exactly 1 type argument, report a diagnostic
-		else if (method.TypeArguments.Length != 1)
+		if (method.IsGenericMethod && method.TypeArguments.Length != 1)
 		{
 			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.TypeParameterList,
 				DiagnosticsDescriptors.MustHaveXGenericParameters, 1);
@@ -85,14 +79,14 @@ public class ResponseDeserializerAnalyzer : DiagnosticAnalyzer
 				DiagnosticsDescriptors.FirstParameterMustBe, nameof(HttpResponseMessage));
 		}
 		// If the method's first parameter is not of type HttpResponseMessage, report a diagnostic
-		else if (!method.Parameters[0].Type.IsType<HttpResponseMessage>())
+		else if (!method.Parameters[0].Type.IsType<HttpResponseMessage>(context.Compilation))
 		{
 			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.ParameterList.Parameters[0],
 				DiagnosticsDescriptors.FirstParameterMustBe, nameof(HttpResponseMessage));
 		}
 
 		// If the method's return type is not awaitable and the second parameter is CancellationToken, report a diagnostic
-		if (!method.ReturnType.IsAwaitableType() && method.Parameters[1].Type.IsType<CancellationToken>())
+		if (!method.ReturnType.IsAwaitableType() && method.Parameters[1].Type.IsType<CancellationToken>(context.Compilation))
 		{
 			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.ParameterList.Parameters[1],
 				DiagnosticsDescriptors.InvalidUseOfCancellationToken);

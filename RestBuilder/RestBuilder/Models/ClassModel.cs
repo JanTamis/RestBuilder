@@ -16,8 +16,9 @@ public record ClassModel
 
 	public string? HttpClientInitializer { get; set; }
 
-	public ResponseDeserializerModel? ResponseDeserializer { get; set; }
-	public RequestBodySerializerModel? RequestBodySerializer { get; set; }
+	public ImmutableEquatableArray<ResponseDeserializerModel> ResponseDeserializers { get; set; }
+	public ImmutableEquatableArray<RequestBodySerializerModel> RequestBodySerializers { get; set; }
+	public ImmutableEquatableArray<RequestQueryParamSerializerModel> RequestQueryParamSerializers { get; set; }
 	
 	public ImmutableEquatableArray<MethodModel> Methods { get; set; }
 	public ImmutableEquatableArray<PropertyModel> Properties { get; set; }

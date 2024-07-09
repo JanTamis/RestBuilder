@@ -33,60 +33,69 @@ public static class CompilerHelpers
 		return symbol.GetAttributes().Any(predicate);
 	}
 
-	public static bool HasParameters<T>(this IMethodSymbol method)
+	public static bool HasParameters<T>(this IMethodSymbol method, Compilation compilation)
 	{
-		return method.Parameters.Length == 1 && 
-		       method.Parameters[0].Type.IsType<T>();
-	}
-	
-	public static bool HasParameters<T1, T2>(this IMethodSymbol method)
-	{
-		return method.Parameters.Length == 2 && 
-		       method.Parameters[0].Type.IsType<T1>() && 
-		       method.Parameters[1].Type.IsType<T2>();
+		return method.Parameters.Length == 1 &&
+		       method.Parameters[0].Type.IsType<T>(compilation);
 	}
 
-	public static bool HasParameters<T1, T2, T3>(this IMethodSymbol method)
+	public static bool HasParameters<T1, T2>(this IMethodSymbol method, Compilation compilation)
 	{
-		return method.Parameters.Length == 3 && 
-		       method.Parameters[0].Type.IsType<T1>() && 
-		       method.Parameters[1].Type.IsType<T2>() && 
-		       method.Parameters[2].Type.IsType<T3>();
+		return method.Parameters.Length == 2 &&
+		       method.Parameters[0].Type.IsType<T1>(compilation) &&
+		       method.Parameters[1].Type.IsType<T2>(compilation);
 	}
 
-	public static bool HasParameters<T1, T2, T3, T4>(this IMethodSymbol method)
+	public static bool HasParameters<T1, T2, T3>(this IMethodSymbol method, Compilation compilation)
 	{
-		return method.Parameters.Length == 4 && 
-		       method.Parameters[0].Type.IsType<T1>() && 
-		       method.Parameters[1].Type.IsType<T2>() && 
-		       method.Parameters[2].Type.IsType<T3>() && 
-		       method.Parameters[3].Type.IsType<T4>();
+		return method.Parameters.Length == 3 &&
+		       method.Parameters[0].Type.IsType<T1>(compilation) &&
+		       method.Parameters[1].Type.IsType<T2>(compilation) &&
+		       method.Parameters[2].Type.IsType<T3>(compilation);
 	}
 
-	public static Location GetParameterLocation<T>(this IMethodSymbol method)
+	public static bool HasParameters<T1, T2, T3, T4>(this IMethodSymbol method, Compilation compilation)
+	{
+		return method.Parameters.Length == 4 &&
+		       method.Parameters[0].Type.IsType<T1>(compilation) &&
+		       method.Parameters[1].Type.IsType<T2>(compilation) &&
+		       method.Parameters[2].Type.IsType<T3>(compilation) &&
+		       method.Parameters[3].Type.IsType<T4>(compilation);
+	}
+
+	public static Location GetParameterLocation<T>(this IMethodSymbol method, Compilation compilation)
 	{
 		return method.Parameters
-			.Where(w => w.Type.IsType<T>())
+			.Where(w => w.Type.IsType<T>(compilation))
 			.Select(s => s.GetLocation())
 			.DefaultIfEmpty(Location.None)
 			.First()!;
 	}
 
-	public static bool HasReturnType<T>(this IMethodSymbol method)
+	public static bool HasReturnType<T>(this IMethodSymbol method, Compilation compilation)
 	{
-		return IsType<T>(method.ReturnType);
+		return IsType<T>(method.ReturnType, compilation);
 	}
-	
-	public static bool IsType<T>(this ISymbol symbol)
+
+	// public static bool IsType<T>(this ISymbol symbol)
+	// {
+	// 	var type = typeof(T);
+	//
+	// 	return symbol.ToString() == type.GetFriendlyName();
+	// }
+
+	public static bool IsType<T>(this ISymbol symbol, Compilation compilation)
 	{
 		var type = typeof(T);
-		return symbol.ContainingNamespace?.ToString() == type.Namespace && symbol.Name == type.Name;
+		var metadataSymbol = compilation.GetTypeByMetadataName(type.FullName!);
+	
+		return SymbolEqualityComparer.Default.Equals(symbol, metadataSymbol);
 	}
 
 	public static bool IsType<T>(this IType symbol)
 	{
 		var type = typeof(T);
-
+	
 		if (type.Namespace == "System" && symbol.Namespace == "System")
 		{
 			switch (type.Name)
@@ -121,7 +130,7 @@ public static class CompilerHelpers
 					return symbol.Type is "Object" or "object";
 			}
 		}
-		
+	
 		return symbol.Namespace == type.Namespace && symbol.Type == type.Name;
 	}
 
@@ -171,8 +180,8 @@ public static class CompilerHelpers
 	{
 		// Zoek de GetAwaiter methode zonder parameters
 		var getAwaiterMethod = typeSymbol.GetMembers("GetAwaiter")
-				.OfType<IMethodSymbol>()
-				.FirstOrDefault(m => m.Parameters.IsEmpty && !m.ReturnsVoid);
+			.OfType<IMethodSymbol>()
+			.FirstOrDefault(m => m.Parameters.IsEmpty && !m.ReturnsVoid);
 
 		if (getAwaiterMethod == null)
 		{
@@ -220,8 +229,8 @@ public static class CompilerHelpers
 	{
 		// Verkrijg de GetAwaiter methode
 		var getAwaiterMethod = awaitableType.GetMembers("GetAwaiter")
-				.OfType<IMethodSymbol>()
-				.FirstOrDefault(m => m.Parameters.IsEmpty && !m.ReturnsVoid);
+			.OfType<IMethodSymbol>()
+			.FirstOrDefault(m => m.Parameters.IsEmpty && !m.ReturnsVoid);
 
 		if (getAwaiterMethod == null)
 		{
@@ -232,16 +241,16 @@ public static class CompilerHelpers
 
 		// Zoek de GetResult methode binnen de awaiter
 		var getResultMethod = awaiterType.GetMembers("GetResult")
-				.OfType<IMethodSymbol>()
-				.FirstOrDefault(m => m.Parameters.IsEmpty);
+			.OfType<IMethodSymbol>()
+			.FirstOrDefault(m => m.Parameters.IsEmpty);
 
 		// Het return type van GetResult is het type dat je zoekt
 		return getResultMethod?.ReturnType;
 	}
 
-	public static bool IsCollection(this ITypeSymbol type)
+	public static bool IsCollection(this ITypeSymbol type, Compilation compilation)
 	{
-		if (type.IsType<String>())
+		if (type.IsType<String>(compilation))
 		{
 			return false;
 		}
@@ -262,6 +271,34 @@ public static class CompilerHelpers
 		return type.ContainingNamespace?.ToString() == "System.Collections.Generic" && type.Name == nameof(IEnumerable);
 	}
 
+	public static ITypeSymbol? GetCollectionType(this ITypeSymbol type, Compilation compilation)
+	{
+		if (type.IsType<String>(compilation))
+		{
+			return null;
+		}
+
+		if (type is IArrayTypeSymbol arraySymbol)
+		{
+			return arraySymbol.ElementType;
+		}
+
+		foreach (var @interface in type.AllInterfaces)
+		{
+			if (@interface.ContainingNamespace?.ToString() == "System.Collections.Generic" && @interface.Name == nameof(IEnumerable))
+			{
+				return @interface.TypeArguments[0];
+			}
+		}
+
+		if (type is INamedTypeSymbol namedTypeSymbol && type.ContainingNamespace?.ToString() == "System.Collections.Generic" && type.Name == nameof(IEnumerable))
+		{
+			return namedTypeSymbol.TypeArguments[0];
+		}
+
+		return null;
+	}
+
 	public static bool IsTaskType(this ITypeSymbol? typeSymbol, Compilation compilation)
 	{
 		if (typeSymbol == null)
@@ -279,7 +316,7 @@ public static class CompilerHelpers
 
 		return false;
 	}
-	
+
 	public static IEnumerable<IMethodSymbol> GetMethods(this ITypeSymbol type)
 	{
 		return type.GetMembers().OfType<IMethodSymbol>();
@@ -296,14 +333,14 @@ public static class CompilerHelpers
 			.Any(syntax => syntax.GetSyntax() is MethodDeclarationSyntax declaration && declaration.Modifiers
 				.Any(modifier => modifier.IsKind(SyntaxKind.PartialKeyword)));
 	}
-	
-	public static bool InheritsFrom<T>(this ITypeSymbol type)
+
+	public static bool InheritsFrom<T>(this ITypeSymbol type, Compilation compilation)
 	{
 		var baseType = type.BaseType;
 
 		while (baseType != null)
 		{
-			if (baseType.IsType<T>())
+			if (baseType.IsType<T>(compilation))
 			{
 				return true;
 			}
@@ -314,13 +351,13 @@ public static class CompilerHelpers
 		return false;
 	}
 
-	public static bool Implements<T>(this ITypeSymbol typeSymbol)
+	public static bool Implements<T>(this ITypeSymbol typeSymbol, Compilation compilation)
 	{
 		var attributes = typeSymbol.AllInterfaces;
-		
+
 		foreach (var attribute in attributes)
 		{
-			if (attribute.IsType<T>())
+			if (attribute.IsType<T>(compilation))
 			{
 				return true;
 			}
@@ -335,7 +372,7 @@ public static class CompilerHelpers
 		{
 			return true;
 		}
-		
+
 		var attributes = typeSymbol.AllInterfaces;
 
 		foreach (var attribute in attributes)
@@ -452,5 +489,31 @@ public static class CompilerHelpers
 		}
 
 		return null;
+	}
+
+	public static string GetFriendlyName(this Type type)
+	{
+		if (type == typeof(int))
+			return "int";
+		if (type == typeof(short))
+			return "short";
+		if (type == typeof(byte))
+			return "byte";
+		if (type == typeof(bool))
+			return "bool";
+		if (type == typeof(long))
+			return "long";
+		if (type == typeof(float))
+			return "float";
+		if (type == typeof(double))
+			return "double";
+		if (type == typeof(decimal))
+			return "decimal";
+		if (type == typeof(string))
+			return "string";
+		if (type.IsGenericType)
+			return $"{type.Namespace}.{type.Name.Split('`')[0]}<{String.Join(", ", type.GetGenericArguments().Select(GetFriendlyName))}>";
+		
+		return $"{type.Namespace}.{type.Name}";
 	}
 }
