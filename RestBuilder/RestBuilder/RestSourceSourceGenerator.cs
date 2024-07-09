@@ -50,7 +50,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 		context.RegisterSourceOutput(classes, static (spc, source) => Execute(source, spc));
 
-		void RegisterSource(string sourceCode, [CallerArgumentExpression(nameof(sourceCode))] string attributeName = null)
+		void RegisterSource(string sourceCode, [CallerArgumentExpression(nameof(sourceCode))] string attributeName = null!)
 		{
 			context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
 				$"{attributeName.Split('.')[^1]}.g.cs",
@@ -161,8 +161,6 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 					builder.WriteLine("};");
 				}
 			}
-
-			
 
 			builder.Indentation = 0;
 		}
