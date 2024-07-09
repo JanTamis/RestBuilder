@@ -93,12 +93,12 @@ public class ResponseDeserializerAnalyzer : DiagnosticAnalyzer
 		}
 
 		// If the method's return type does not match its type argument and the return type of the awaitable does not match the type argument, report a diagnostic
-		if (!SymbolEqualityComparer.Default.Equals(method.ReturnType, method.TypeArguments[0]) &&
-		    !SymbolEqualityComparer.Default.Equals(method.ReturnType.GetAwaitableReturnType(), method.TypeArguments[0]))
-		{
-			context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.ReturnType,
-				DiagnosticsDescriptors.MustReturnGenericTypeOrAwaitable, method.TypeArguments[0].ToDisplayString());
-		}
+		// if (!SymbolEqualityComparer.Default.Equals(method.ReturnType, method.TypeArguments[0]) &&
+		//     !SymbolEqualityComparer.Default.Equals(method.ReturnType.GetAwaitableReturnType(), method.TypeArguments[0]))
+		// {
+		// 	context.ReportDiagnostic<MethodDeclarationSyntax>(method, n => n.ReturnType,
+		// 		DiagnosticsDescriptors.MustReturnGenericTypeOrAwaitable, method.TypeArguments[0].ToDisplayString());
+		// }
 
 		// Check if any of the methods in the containing type are partial and have a return type that is not void
 		var parentHasBodies = method.ContainingType

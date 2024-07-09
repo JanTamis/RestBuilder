@@ -48,7 +48,9 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 				(node, token) => !token.IsCancellationRequested && node is ClassDeclarationSyntax classDeclaration && classDeclaration.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)),
 				GenerateSource);
 
-		context.RegisterSourceOutput(classes, static (spc, source) => Execute(source, spc));
+		;
+
+		context.RegisterSourceOutput(classes.Combine(context.CompilationProvider), static (spc, source) => Execute(source.Left, source.Right, spc));
 
 		void RegisterSource(string sourceCode, [CallerArgumentExpression(nameof(sourceCode))] string attributeName = null!)
 		{
@@ -68,7 +70,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		return null;
 	}
 
-	private static void Execute(ClassModel? source, SourceProductionContext context)
+	private static void Execute(ClassModel? source, Compilation compilation, SourceProductionContext context)
 	{
 		if (source is null)
 		{
@@ -78,7 +80,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		var builder = new SourceWriter('\t', 1);
 
 		WriteNamespaces(source, builder);
-		WriteClassStart(source, builder);
+		WriteClassStart(source, compilation, builder);
 		WriteMethods(source, builder);
 		WriteClassEnd(builder);
 
@@ -112,17 +114,32 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		}
 	}
 
-	private static void WriteClassStart(ClassModel source, SourceWriter builder)
+	private static void WriteClassStart(ClassModel source, Compilation compilation, SourceWriter builder)
 	{
 		var hasHeaders = source.Attributes.Any(a => a.Location == HttpLocation.Header);
 
-		builder.WriteLine($$"""
-				
-			namespace {{source.Namespace}};
+		if (compilation.Options.NullableContextOptions == NullableContextOptions.Enable)
+		{
+			builder.WriteLine($$"""
+					
+				namespace {{source.Namespace}};
 
-			public partial class {{source.Name}}
-			{
-			""");
+				#nullable enable
+
+				public partial class {{source.Name}}
+				{
+				""");
+		}
+		else
+		{
+			builder.WriteLine($$"""
+					
+				namespace {{source.Namespace}};
+
+				public partial class {{source.Name}}
+				{
+				""");
+		}
 
 		if (source.NeedsClient)
 		{
@@ -268,7 +285,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 		if (optionalQueries.Any())
 		{
-			PathWriter.WriteCreatePathMethod(method, optionalQueries, builder);
+			PathWriter.WriteCreatePathMethod(method, classModel.RequestQueryParamSerializers, optionalQueries, builder);
 		}
 	}
 

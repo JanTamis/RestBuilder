@@ -387,15 +387,14 @@ public static class ClassParser
 			.GetMethods()
 			.Where(w => w.HasAttribute(nameof(Literals.RequestQueryParamSerializerAttribute)) 
 			            && w.ReturnType.IsType<IEnumerable<KeyValuePair<string, string>>>(compilation)
-			            && w.TypeArguments.Length == 2
 			            && w.Parameters.Length >= 2
-			            && SymbolEqualityComparer.Default.Equals(w.Parameters[0].Type, w.TypeArguments[0])
-			            && (SymbolEqualityComparer.Default.Equals(w.Parameters[1].Type, w.TypeArguments[1]) 
-			                || SymbolEqualityComparer.Default.Equals(w.Parameters[1].Type.GetCollectionType(compilation), w.TypeArguments[1])))
+			            && w.Parameters[0].Type.IsType<string>(compilation))
 			.Select(s => new RequestQueryParamSerializerModel
 			{
+				ValueType = GetTypeModel(s.Parameters[1].Type, compilation),
+				IsAsync = false, //s.ReturnType.IsType<IAsyncEnumerable<KeyValuePair<string, string>>>(compilation),
 				Name = s.Name,
-				IsCollection = SymbolEqualityComparer.Default.Equals(s.Parameters[1].Type.GetCollectionType(compilation), s.TypeArguments[1]),
+				IsCollection = s.Parameters[1].Type.IsCollection(compilation),
 			})
 			.ToImmutableEquatableArray();
 	}

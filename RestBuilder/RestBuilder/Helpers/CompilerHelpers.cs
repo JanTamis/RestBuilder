@@ -88,8 +88,13 @@ public static class CompilerHelpers
 	{
 		var type = typeof(T);
 		var metadataSymbol = compilation.GetTypeByMetadataName(type.FullName!);
-	
-		return SymbolEqualityComparer.Default.Equals(symbol, metadataSymbol);
+
+		if (metadataSymbol != null)
+		{
+			return SymbolEqualityComparer.Default.Equals(symbol, metadataSymbol);
+		}
+
+		return symbol.ToString() == type.GetFriendlyName();
 	}
 
 	public static bool IsType<T>(this IType symbol)

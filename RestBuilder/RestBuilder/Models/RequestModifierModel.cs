@@ -17,4 +17,7 @@ public record RequestQueryParamSerializerModel
 	public bool IsCollection { get; set; }
 	
 	public string Name { get; set; }
+	
+	public bool IsAsync { get; set; }
+	public TypeModel ValueType { get; set; }
 }

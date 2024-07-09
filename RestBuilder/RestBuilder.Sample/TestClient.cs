@@ -14,9 +14,9 @@ namespace RestBuilder.Sample;
 public partial class TestClient : IDisposable
 {
 	[RequestQueryParamSerializer] 
-	public IEnumerable<KeyValuePair<string, string>> SerializeParameter<TKey, TValue>(TKey key, TValue value)
+	public IEnumerable<KeyValuePair<string, string>> SerializeParameter<T>(string key, T value)
 	{
-		yield break;
+		yield return KeyValuePair.Create<string, string>(key, value.ToString());
 	}
 	
 	[Get("{username}/User?")]
@@ -25,7 +25,8 @@ public partial class TestClient : IDisposable
 	public partial ValueTask<string> GetUserAsync(
 		[Path("username")] string password,
 		[Body] string body,
-		[QueryMap] Dictionary<string, int> name,
+		[Query] string? test,
+		// [QueryMap] Dictionary<string, int> name,
 		CancellationToken token);
 
 	[RequestModifier]
