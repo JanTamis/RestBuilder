@@ -412,8 +412,8 @@ public static class ClassParser
 		}
 
 		return x.Type == y.Type &&
-		       x.Namespace == y.Namespace &&
-		       x.NullableAnnotation == y.NullableAnnotation &&
-		       x.IsNullable == y.IsNullable;
+		       x.Namespace == y.Namespace;
+		// x.NullableAnnotation == y.NullableAnnotation &&
+		// x.IsNullable == y.IsNullable;
 	}
 }

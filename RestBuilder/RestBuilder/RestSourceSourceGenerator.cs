@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -48,8 +49,6 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 				(node, token) => !token.IsCancellationRequested && node is ClassDeclarationSyntax classDeclaration && classDeclaration.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)),
 				GenerateSource);
 
-		;
-
 		context.RegisterSourceOutput(classes.Combine(context.CompilationProvider), static (spc, source) => Execute(source.Left, source.Right, spc));
 
 		void RegisterSource(string sourceCode, [CallerArgumentExpression(nameof(sourceCode))] string attributeName = null!)
@@ -72,11 +71,16 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 	private static void Execute(ClassModel? source, Compilation compilation, SourceProductionContext context)
 	{
+		if (compilation is CSharpCompilation csharpCompilation)
+		{
+			Debug.WriteLine(csharpCompilation.LanguageVersion.MapSpecifiedToEffectiveVersion());
+		}
+
 		if (source is null)
 		{
 			return;
 		}
-		
+
 		var builder = new SourceWriter('\t', 1);
 
 		WriteNamespaces(source, builder);
@@ -99,6 +103,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 				"System.Net.Http",
 				"System.Net.Http.Json",
 				"System.Net.Http.Headers",
+				"System.Linq",
 				"System.Threading",
 				"System.Threading.Tasks",
 				"System.Runtime.CompilerServices"
@@ -107,7 +112,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			.Distinct()
 			.OrderBy(o => o)
 			.Select(s => $"using {s};");
-		
+
 		foreach (var @namespace in namespaces)
 		{
 			builder.WriteLine(@namespace);
@@ -226,16 +231,18 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			? "async "
 			: String.Empty;
 
+		CommentWriter.WriteComment(builder, source, method);
+		
 		using (builder.AppendIndentation($"public partial {asyncKeyword}{returnType} {method.Name}({String.Join(", ", method.Parameters.Select(s => $"{s.Type} {s.Name}"))})"))
 		{
 			if (method.IsAwaitable)
 			{
 				var items = method.Parameters
-				.Concat<IType>(source.Properties)
-				.ToList();
+					.Concat<IType>(source.Properties)
+					.ToList();
 
 				WriteMethodBody(method, source.ClientName, items, source, tokenText, builder);
-			}			
+			}
 		}
 	}
 
@@ -270,17 +277,21 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 		if (!headers.Any() && !bodies.Any() && !methodDefaultItems.Any() && classModel.RequestModifiers.Length == 0)
 		{
-			WriteMethodBodyWithoutHeaders(method, clientName, items, tokenText, builder);
+			WriteMethodBodyWithoutHeaders(method, clientName, items, tokenText, classModel.RequestQueryParamSerializers, builder);
 		}
 		else
 		{
-			WriteMethodBodyWithHeaders(method, clientName, items, tokenText, headers, methodDefaultItems.ToDictionary(t => t.Name ?? String.Empty, t => t), bodies.FirstOrDefault(), classModel, builder);
+			WriteMethodBodyWithHeaders(method, clientName, items, tokenText, headers, methodDefaultItems.ToDictionary(t => t.Name ?? String.Empty, t => t), bodies.FirstOrDefault(), classModel, classModel.RequestQueryParamSerializers, builder);
 		}
 
 		WriteMethodReturn(method, classModel.ResponseDeserializers, tokenText, builder);
 
 		var optionalQueries = items
-			.Where(w => w.Location.Location == HttpLocation.Query && w is { IsNullable: true, NullableAnnotation: NullableAnnotation.Annotated } || w.Location.Location == HttpLocation.QueryMap || (w.Location.Location == HttpLocation.Raw && w.IsNullable))
+			.Where(w => w.Location.Location == HttpLocation.Query 
+				&& (w is { IsNullable: true, NullableAnnotation: NullableAnnotation.Annotated } 
+				    || PathWriter.GetQueryParamSerializer(classModel.RequestQueryParamSerializers, w) != null) 
+				|| w.Location.Location == HttpLocation.QueryMap 
+				|| (w.Location.Location == HttpLocation.Raw && w.IsNullable))
 			.ToList();
 
 		if (optionalQueries.Any())
@@ -289,21 +300,27 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		}
 	}
 
-	private static void WriteMethodBodyWithoutHeaders(MethodModel method, string clientName, IEnumerable<IType> items, string tokenText, SourceWriter builder)
+	private static void WriteMethodBodyWithoutHeaders(MethodModel method, string clientName, IEnumerable<IType> items, string tokenText, ImmutableEquatableArray<RequestQueryParamSerializerModel> queryParamSerializers, SourceWriter builder)
 	{
+		Debug.WriteLine(method.ReturnType);
+		
 		if (method.ReturnTypeName is nameof(HttpResponseMessage))
 		{
-			builder.WriteLine($"var response = await {clientName}.{method.Method.Method ?? "Get"}Async({PathWriter.ParsePath(method.Path, items)}, {tokenText});");
+			builder.WriteLine($"var response = await {clientName}.{method.Method.Method ?? "Get"}Async({PathWriter.ParsePath(method.Path, items, queryParamSerializers)}, {tokenText});");
+		}
+		else if (method.ReturnType is { Type: "void", Namespace: "System" })
+		{
+			builder.WriteLine($"await {clientName}.{method.Method.Method ?? "Get"}Async({PathWriter.ParsePath(method.Path, items, queryParamSerializers)}, {tokenText});");
 		}
 		else
 		{
-			builder.WriteLine($"using var response = await {clientName}.{method.Method.Method ?? "Get"}Async({PathWriter.ParsePath(method.Path, items)}, {tokenText});");
+			builder.WriteLine($"using var response = await {clientName}.{method.Method.Method ?? "Get"}Async({PathWriter.ParsePath(method.Path, items, queryParamSerializers)}, {tokenText});");
 		}
 	}
 
-	private static void WriteMethodBodyWithHeaders(MethodModel method, string clientName, IEnumerable<IType> items, string tokenText, ILookup<bool, IType> headers, Dictionary<string, LocationAttributeModel> defaultItems, IType? body, ClassModel classModel, SourceWriter builder)
+	private static void WriteMethodBodyWithHeaders(MethodModel method, string clientName, IEnumerable<IType> items, string tokenText, ILookup<bool, IType> headers, Dictionary<string, LocationAttributeModel> defaultItems, IType? body, ClassModel classModel, ImmutableEquatableArray<RequestQueryParamSerializerModel> queryParamSerializers, SourceWriter builder)
 	{
-		builder.WriteLine($"using var request = new HttpRequestMessage(HttpMethod.{method.Method.Method ?? "Get"}, {PathWriter.ParsePath(method.Path, items)});");
+		builder.WriteLine($"using var request = new HttpRequestMessage(HttpMethod.{method.Method.Method ?? "Get"}, {PathWriter.ParsePath(method.Path, items, queryParamSerializers)});");
 
 		var defaultHeaders = defaultItems
 			.Where(item => headers[false].All(a => a.Name != item.Key) && headers[true].All(a => a.Name != item.Key))
@@ -355,10 +372,16 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 			builder.WriteLine();
 		}
+		
+		Debug.WriteLine(method.ReturnType);
 
 		if (method.ReturnTypeName is nameof(HttpResponseMessage))
 		{
 			builder.WriteLine($"var response = await {clientName}.SendAsync(request, {tokenText});");
+		}
+		else if (method.ReturnType is { Type: "void", Namespace: "System" })
+		{
+			builder.WriteLine($"await {clientName}.SendAsync(request, {tokenText});");
 		}
 		else
 		{
@@ -413,6 +436,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 				builder.WriteLine();
 				builder.WriteLine($"return {awaitPrefix}{deserializer.Name}<{method.ReturnType.Name}>(response{cancellationTokenSuffix});");
+
 
 				return;
 			}
