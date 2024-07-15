@@ -14,7 +14,7 @@ namespace RestBuilder.Sample;
 public partial class TestClient : IDisposable
 {
 	[RequestQueryParamSerializer] 
-	public static IEnumerable<KeyValuePair<string, string?>> SerializeParameter<T>(string key, T value)
+	public static IEnumerable<KeyValuePair<string, string>> SerializeParameter<T>(string key, T value)
 	{
 		yield return KeyValuePair.Create(key, value!.ToString());
 	}

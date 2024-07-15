@@ -207,9 +207,10 @@ public static class PathWriter
 		{
 			builder.WriteLine($"if ({query.Name} != null)");
 			builder.WriteLine('{');
+			builder.Indentation++;
 		}
 
-		builder.Indentation++;
+		
 
 		if (query.IsCollection)
 		{
@@ -289,14 +290,12 @@ public static class PathWriter
 		
 		
 
-		builder.Indentation--;
-
 		if (query is { IsNullable: true, NullableAnnotation: NullableAnnotation.Annotated })
 		{
+			builder.Indentation--;
 			builder.WriteLine('}');
 		}
 		
-
 		return;
 
 		void AppendContinue(string fieldName)

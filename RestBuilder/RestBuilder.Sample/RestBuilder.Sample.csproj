@@ -1,13 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFramework>net9.0</TargetFramework>
+		<TargetFramework>net8.0</TargetFramework>
 		<Nullable>enable</Nullable>
 		<RootNamespace>RestBuilder.Sample</RootNamespace>
 		<LangVersion>default</LangVersion>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\RestBuilder\RestBuilder.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
+		<ProjectReference Include="..\RestBuilder\RestBuilder.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 	</ItemGroup>
 </Project>
