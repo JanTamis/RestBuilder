@@ -198,7 +198,9 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		if (source.IsDisposable)
 		{
 			builder.WriteLine();
-
+			builder.WriteLine("/// <summary>");
+			builder.WriteLine("/// Disposes the HttpClient.");
+			builder.WriteLine("/// </summary>");
 			using (builder.AppendIndentation("public void Dispose()"))
 			{
 				builder.WriteLine($"{source.ClientName}.Dispose();");
