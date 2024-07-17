@@ -736,11 +736,6 @@ public static class Literals
 			/// In which order the RequestModifiers should be invoked, lower values means earlier
 			/// </summary>
 			public int Order { get; set; }
-
-			public RequestModifierAttribute()
-			{
-				Order = 0;
-			}
 		}
 		""";
 

@@ -21,7 +21,6 @@ public partial class TestClient : IDisposable
 	
 	[Get("{username}/User")]
 	[Header("Authorization", "Bearer 123")]
-	[AllowAnyStatusCode]
 	public partial ValueTask<string> GetUserAsync(
 		[Path("username")] string password,
 		[Body] string body,
@@ -40,7 +39,7 @@ public partial class TestClient : IDisposable
 		return response.Content.ReadAsStringAsync(token);
 	}
 
-	// [RequestBodySerializer]
+	[RequestBodySerializer]
 	private HttpContent SerializeString(string body)
 	{
 		return new StringContent(body);

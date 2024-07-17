@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -21,6 +22,32 @@ public static class CommentWriter
 	{
 		WriteSummary(writer, classModel, methodModel);
 
+		if (methodModel.ReturnNamespace != "System" && methodModel.ReturnTypeName != "void")
+		{
+			var bodySerializer = classModel.ResponseDeserializers.FirstOrDefault(a => ClassParser.TypeEquals(methodModel.ReturnType, a.Type));
+
+			if (bodySerializer != null)
+			{
+				writer.WriteLine($"/// <returns>Processes the response via {bodySerializer.Name} and returns the result.</returns>");
+			}
+			else if (methodModel.ReturnType.IsType<string>())
+			{
+				writer.WriteLine($"/// <returns>Returns the content of the response as a string.</returns>");
+			}
+			else if (methodModel.ReturnType.IsType<byte[]>())
+			{
+				writer.WriteLine($"/// <returns>Returns the content as a byte array.</returns>");
+			}
+			else if (methodModel.ReturnType.IsType<Stream>())
+			{
+				writer.WriteLine($"/// <returns>Returns the content as a Stream.</returns>");
+			}
+			else
+			{
+				writer.WriteLine($"/// <returns>Reads the content of the response as json and parses it as {methodModel.ReturnTypeName}.</returns>");
+			}
+		}
+
 		foreach (var parameter in methodModel.Parameters)
 		{
 			writerParameterComment(writer, parameter, classModel);
@@ -32,20 +59,37 @@ public static class CommentWriter
 
 		if (parametersThatThrow.Any())
 		{
-			writer.WriteLine("/// <exception cref=\"System.ArgumentNullException\">");
+			writer.WriteLine("/// <exception cref=\"ArgumentNullException\">");
+			//writer.WriteLine($"/// Throws if {String.Join(", ", parametersThatThrow.Select(s => $"<see cref=\"{s.Name}\" />"))} is null.");
+
+			var result = String.Empty;
 			
 			for (var i = 0; i < parametersThatThrow.Count; i++)
 			{
-				if (i < parametersThatThrow.Count - 1)
+				if (i == 0)
 				{
-					writer.WriteLine($"/// Throws if <see cref=\"{parametersThatThrow[i].Name}\" /> is null. <br/>");
+					result += $"<see cref=\"{parametersThatThrow[i].Name}\" />";
 				}
+				else if (i < parametersThatThrow.Count - 1)
+				{
+					result += $", <see cref=\"{parametersThatThrow[i].Name}\" />";
+				}
+				
 				else
 				{
-					writer.WriteLine($"/// Throws if <see cref=\"{parametersThatThrow[i].Name}\" /> is null.");
+					result += $" or <see cref=\"{parametersThatThrow[i].Name}\" />";
 				}
 			}
+			
+			writer.WriteLine($"/// Throws if {result} is null.");
 
+			writer.WriteLine("/// </exception>");
+		}
+
+		if (!methodModel.AllowAnyStatusCode)
+		{
+			writer.WriteLine("/// <exception cref=\"HttpRequestException\">");
+			writer.WriteLine("/// Throws if the request failed or the response status code is not a success code.");
 			writer.WriteLine("/// </exception>");
 		}
 	}
@@ -99,19 +143,19 @@ public static class CommentWriter
 					{
 						if (parameter.IsType<string>())
 						{
-							result += $"Sets the body to 'new StringContent(<see cref=\"{parameter.Name}\" />)'";
+							result += $"Sets the body to 'new StringContent(<see cref=\"{parameter.Name}\" />)'.";
 						}
 						else if (parameter.IsType<byte[]>())
 						{
-							result += $"Sets the body to 'new ByteArrayContent(<see cref=\"{parameter.Name}\" />)'";
+							result += $"Sets the body to 'new ByteArrayContent(<see cref=\"{parameter.Name}\" />)'.";
 						}
 						else if (parameter.IsType<Stream>())
 						{
-							result += $"Sets the body to 'new StreamContent(<see cref=\"{parameter.Name}\" />)'";
+							result += $"Sets the body to 'new StreamContent(<see cref=\"{parameter.Name}\" />)'.";
 						}
 						else if (parameter.IsType<HttpContent>())
 						{
-							result += $"request.Content = {parameter.Name};";
+							result += $"Sets the body to <see cref=\"{parameter.Name}\" />.";
 						}
 						else
 						{
