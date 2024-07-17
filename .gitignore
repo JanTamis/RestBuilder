@@ -7,3 +7,8 @@
 /RestBuilder/RestBuilder/obj
 /RestBuilder/RestBuilder.Sample/bin/Debug/net8.0
 /RestBuilder/RestBuilder.Sample/obj
+/RestBuilder.SourceGenerator/obj
+/RestBuilder.SourceGenerator/bin/Debug/netstandard2.0
+/RestBuilder.Sample/obj
+/RestBuilder.Core/obj
+/RestBuilder.Core/bin/Debug/netstandard2.0
