@@ -635,15 +635,11 @@ public static class PathWriter
 
 	public static RequestQueryParamSerializerModel? GetQueryParamSerializer(ImmutableEquatableArray<RequestQueryParamSerializerModel> queryParamSerializers, IType? query)
 	{
-		var result = queryParamSerializers
+		return queryParamSerializers
 			.Where(w => !w.ValueType.IsGeneric && ClassParser.TypeEquals(w.ValueType, query))
 			.DefaultIfEmpty(queryParamSerializers
 				.FirstOrDefault(w => w.ValueType.IsGeneric))
 			.First();
-
-		Debug.WriteLine(result);
-
-		return result;
 	}
 
 	private static void AppendContinue(SourceWriter builder, string fieldName)

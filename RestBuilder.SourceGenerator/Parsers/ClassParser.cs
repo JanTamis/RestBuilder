@@ -191,7 +191,8 @@ public static class ClassParser
 	{
 		foreach (var @interface in type.AllInterfaces)
 		{
-			if (@interface.ContainingNamespace?.ToString() == "System.Collections.Generic" && @interface.Name == nameof(IDictionary))
+			if (@interface.ContainingNamespace?.ToString() == "System.Collections.Generic"
+					&& @interface.Name == nameof(IDictionary))
 			{
 				return @interface.TypeArguments.Select(s => GetTypeModel(s, compilation));
 			}
@@ -207,11 +208,11 @@ public static class ClassParser
 
 	private static bool IsDisposable(ITypeSymbol classSymbol, Compilation compilation)
 	{
-		return classSymbol.AllInterfaces.Any(a => a.IsType<IDisposable>(compilation)) &&
-					 !classSymbol
-						 .GetMembers()
-						 .OfType<IMethodSymbol>()
-						 .Any(a => !a.IsPartialDefinition && a is { ReturnsVoid: true, Parameters.IsEmpty: true, Name: nameof(IDisposable.Dispose) });
+		return classSymbol.AllInterfaces.Any(a => a.IsType<IDisposable>(compilation))
+					 && !classSymbol
+								.GetMembers()
+								.OfType<IMethodSymbol>()
+								.Any(a => !a.IsPartialDefinition && a is { ReturnsVoid: true, Parameters.IsEmpty: true, Name: nameof(IDisposable.Dispose) });
 	}
 
 	private static ImmutableEquatableArray<ResponseDeserializerModel> GetResponseDeserializers(INamedTypeSymbol classSymbol, Compilation compilation)
@@ -219,10 +220,10 @@ public static class ClassParser
 		return classSymbol
 			.GetMembers()
 			.OfType<IMethodSymbol>()
-			.Where(w => w.HasAttribute<ResponseDeserializerAttribute>(compilation) &&
-									(w.HasParameters<HttpResponseMessage>(compilation) ||
-									 w.HasParameters<HttpResponseMessage, CancellationToken>(compilation) &&
-									(!w.IsGenericMethod || w.TypeArguments.Length == 1)))
+			.Where(w => w.HasAttribute<ResponseDeserializerAttribute>(compilation)
+									&& (w.HasParameters<HttpResponseMessage>(compilation)
+										|| w.HasParameters<HttpResponseMessage, CancellationToken>(compilation)
+										&& (!w.IsGenericMethod || w.TypeArguments.Length == 1)))
 			.Select(s => new ResponseDeserializerModel
 			{
 				Name = s.Name,
@@ -238,9 +239,10 @@ public static class ClassParser
 		return classSymbol
 			.GetMembers()
 			.OfType<IMethodSymbol>()
-			.Where(w => w.HasAttribute<RequestBodySerializerAttribute>(compilation) &&
-									(w.ReturnType.IsType<HttpContent>(compilation) || w.ReturnType.GetAwaitableReturnType()?.IsType<HttpContent>(compilation) == true) &&
-									w.Parameters.Length is 1 or 2)
+			.Where(w => w.HasAttribute<RequestBodySerializerAttribute>(compilation)
+									&& (w.ReturnType.IsType<HttpContent>(compilation)
+										|| w.ReturnType.GetAwaitableReturnType()?.IsType<HttpContent>(compilation) == true)
+										&& w.Parameters.Length is 1 or 2)
 			.Select(s => new RequestBodySerializerModel
 			{
 				Name = s.Name,
@@ -315,7 +317,10 @@ public static class ClassParser
 	{
 		return classSymbol
 			.GetMembers()
-			.Any(w => w.Name == clientName && (w is IFieldSymbol field && field.Type.IsType<HttpClient>(compilation) || w is IPropertySymbol propery && propery.Type.IsType<HttpClient>(compilation)));
+			.Any(w => w.Name == clientName && 
+								(w is IFieldSymbol field 
+									&& field.Type.IsType<HttpClient>(compilation) 
+									|| w is IPropertySymbol propery && propery.Type.IsType<HttpClient>(compilation)));
 	}
 
 	private static ImmutableEquatableArray<PropertyModel> GetProperties(INamedTypeSymbol classSymbol)
@@ -357,7 +362,10 @@ public static class ClassParser
 	{
 		return classSymbol
 			.GetMethods()
-			.Where(w => w.IsStatic && w.HasAttribute<HttpClientInitializerAttribute>(compilation) && w.Parameters.Length == 0 && w.HasReturnType<HttpClient>(compilation))
+			.Where(w => w.IsStatic 
+									&& w.HasAttribute<HttpClientInitializerAttribute>(compilation) 
+									&& w.Parameters.Length == 0 
+									&& w.HasReturnType<HttpClient>(compilation))
 			.Select(s => s.Name)
 			.FirstOrDefault();
 	}

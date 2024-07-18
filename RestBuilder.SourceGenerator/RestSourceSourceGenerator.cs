@@ -1,16 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Net.Http;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Text;
 using RestBuilder.Core.Attributes;
 using RestBuilder.SourceGenerator.Enumerators;
 using RestBuilder.SourceGenerator.Helpers;
@@ -18,6 +8,13 @@ using RestBuilder.SourceGenerator.Interfaces;
 using RestBuilder.SourceGenerator.Models;
 using RestBuilder.SourceGenerator.Parsers;
 using RestBuilder.SourceGenerator.Writers;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 using TypeShape.Roslyn;
 
 namespace RestBuilder.SourceGenerator;
@@ -30,22 +27,21 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		var classes = context.SyntaxProvider
 			.ForAttributeWithMetadataName(
 				$"RestBuilder.Core.Attributes.{nameof(RestClientAttribute)}",
-				(node, token) => !token.IsCancellationRequested && node is ClassDeclarationSyntax classDeclaration && classDeclaration.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)),
+				(node, token) => !token.IsCancellationRequested
+												 && node is ClassDeclarationSyntax classDeclaration
+												 && classDeclaration.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)),
 				GenerateSource);
 
-		context.RegisterSourceOutput(classes.Combine(context.CompilationProvider), static (spc, source) => Execute(source.Left, source.Right, spc));
-
-		void RegisterSource(string sourceCode, [CallerArgumentExpression(nameof(sourceCode))] string attributeName = null!)
+		context.RegisterSourceOutput(classes.Combine(context.CompilationProvider), static (spc, source) =>
 		{
-			context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
-				$"{attributeName.Split('.')[^1]}.g.cs",
-				SourceText.From(sourceCode, Encoding.UTF8)));
-		}
+			Execute(source.Left, source.Right, spc);
+		});
 	}
 
 	private static ClassModel? GenerateSource(GeneratorAttributeSyntaxContext context, CancellationToken token)
 	{
-		if (!token.IsCancellationRequested && context is { TargetNode: ClassDeclarationSyntax classDeclarationSyntax, TargetSymbol: INamedTypeSymbol namedTypeSymbol })
+		if (!token.IsCancellationRequested
+				&& context is { TargetNode: ClassDeclarationSyntax classDeclarationSyntax, TargetSymbol: INamedTypeSymbol namedTypeSymbol })
 		{
 			return ClassParser.Parse(classDeclarationSyntax, namedTypeSymbol, context.Attributes, context.SemanticModel.Compilation);
 		}
@@ -55,11 +51,6 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 	private static void Execute(ClassModel? source, Compilation compilation, SourceProductionContext context)
 	{
-		if (compilation is CSharpCompilation csharpCompilation)
-		{
-			Debug.WriteLine(csharpCompilation.LanguageVersion.MapSpecifiedToEffectiveVersion());
-		}
-
 		if (source is null)
 		{
 			return;
@@ -194,12 +185,12 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 	private static void WriteMethod(MethodModel method, ClassModel source, SourceWriter builder)
 	{
-		var returnType = "Task";
+		var returnType = nameof(Task);
 
 		var tokenText = method.Parameters
 			.Concat<IType>(source.Properties.Where(w => w.Location.Location == HttpLocation.Header))
 			.DistinctBy(d => d.Location.Name ?? d.Name)
-			.Where(w => w.Namespace == "System.Threading" && w.Type is nameof(CancellationToken))
+			.Where(w => w.IsType<CancellationToken>())
 			.Select(s => s.Name)
 			.DefaultIfEmpty("CancellationToken.None")
 			.First();
@@ -218,7 +209,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			: String.Empty;
 
 		CommentWriter.WriteComment(builder, source, method);
-		
+
 		using (builder.AppendIndentation($"public partial {asyncKeyword}{returnType} {method.Name}({String.Join(", ", method.Parameters.Select(s => $"{s.Type} {s.Name}"))})"))
 		{
 			if (method.IsAwaitable)
@@ -261,7 +252,10 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			builder.WriteLine();
 		}
 
-		if (!headers.Any() && !bodies.Any() && !methodDefaultItems.Any() && classModel.RequestModifiers.Length == 0)
+		if (!headers.Any()
+				&& !bodies.Any()
+				&& !methodDefaultItems.Any()
+				&& classModel.RequestModifiers.Length == 0)
 		{
 			WriteMethodBodyWithoutHeaders(method, clientName, items, tokenText, classModel.RequestQueryParamSerializers, builder);
 		}
@@ -273,11 +267,11 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		WriteMethodReturn(method, classModel.ResponseDeserializers, tokenText, builder);
 
 		var optionalQueries = items
-			.Where(w => w.Location.Location == HttpLocation.Query 
-				&& (w is { IsNullable: true, NullableAnnotation: NullableAnnotation.Annotated } 
-				    || PathWriter.GetQueryParamSerializer(classModel.RequestQueryParamSerializers, w) != null) 
-				|| w.Location.Location == HttpLocation.QueryMap 
-				|| (w.Location.Location == HttpLocation.Raw && w.IsNullable))
+			.Where(w => w.Location.Location == HttpLocation.Query
+									&& (w is { IsNullable: true, NullableAnnotation: NullableAnnotation.Annotated }
+										|| PathWriter.GetQueryParamSerializer(classModel.RequestQueryParamSerializers, w) != null)
+									|| w.Location.Location == HttpLocation.QueryMap
+									|| (w.Location.Location == HttpLocation.Raw && w.IsNullable))
 			.ToList();
 
 		if (optionalQueries.Any())
@@ -288,8 +282,6 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 	private static void WriteMethodBodyWithoutHeaders(MethodModel method, string clientName, IEnumerable<IType> items, string tokenText, ImmutableEquatableArray<RequestQueryParamSerializerModel> queryParamSerializers, SourceWriter builder)
 	{
-		Debug.WriteLine(method.ReturnType);
-		
 		if (method.ReturnTypeName is nameof(HttpResponseMessage))
 		{
 			builder.WriteLine($"var response = await {clientName}.{method.Method.Method ?? "Get"}Async({PathWriter.ParsePath(method.Path, items, queryParamSerializers)}, {tokenText});");
@@ -358,8 +350,6 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 			builder.WriteLine();
 		}
-		
-		Debug.WriteLine(method.ReturnType);
 
 		if (method.ReturnTypeName is nameof(HttpResponseMessage))
 		{
