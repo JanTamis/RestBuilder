@@ -1,8 +1,13 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RestBuilder", "RestBuilder\RestBuilder\RestBuilder.csproj", "{35ABB739-58CD-4B7C-95AF-A772B5F68DA4}"
+# Visual Studio Version 17
+VisualStudioVersion = 17.10.35027.167
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RestBuilder.SourceGenerator", "RestBuilder.SourceGenerator\RestBuilder.SourceGenerator.csproj", "{35ABB739-58CD-4B7C-95AF-A772B5F68DA4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RestBuilder.Sample", "RestBuilder\RestBuilder.Sample\RestBuilder.Sample.csproj", "{7154730B-289D-41B8-8B7E-7CB92F259465}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RestBuilder.Sample", "RestBuilder.Sample\RestBuilder.Sample.csproj", "{7154730B-289D-41B8-8B7E-7CB92F259465}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RestBuilder.Core", "RestBuilder.Core\RestBuilder.Core.csproj", "{9E00F7E6-13EE-43B9-A445-B9D88F85A461}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -18,5 +23,15 @@ Global
 		{7154730B-289D-41B8-8B7E-7CB92F259465}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7154730B-289D-41B8-8B7E-7CB92F259465}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7154730B-289D-41B8-8B7E-7CB92F259465}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9E00F7E6-13EE-43B9-A445-B9D88F85A461}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9E00F7E6-13EE-43B9-A445-B9D88F85A461}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9E00F7E6-13EE-43B9-A445-B9D88F85A461}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9E00F7E6-13EE-43B9-A445-B9D88F85A461}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {4226D8FF-58EA-4F1B-9481-0AAD6AF705AD}
 	EndGlobalSection
 EndGlobal
