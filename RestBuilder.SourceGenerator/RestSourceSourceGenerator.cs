@@ -10,6 +10,7 @@ using RestBuilder.SourceGenerator.Parsers;
 using RestBuilder.SourceGenerator.Writers;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -25,11 +26,10 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
 		var classes = context.SyntaxProvider
-			.ForAttributeWithMetadataName(
-				$"RestBuilder.Core.Attributes.{nameof(RestClientAttribute)}",
+			.ForAttributeWithMetadataName($"RestBuilder.Core.Attributes.{nameof(RestClientAttribute)}",
 				(node, token) => !token.IsCancellationRequested
-												 && node is ClassDeclarationSyntax classDeclaration
-												 && classDeclaration.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)),
+				                 && node is ClassDeclarationSyntax classDeclaration
+				                 && classDeclaration.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)),
 				GenerateSource);
 
 		context.RegisterSourceOutput(classes.Combine(context.CompilationProvider), static (spc, source) =>
@@ -41,7 +41,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 	private static ClassModel? GenerateSource(GeneratorAttributeSyntaxContext context, CancellationToken token)
 	{
 		if (!token.IsCancellationRequested
-				&& context is { TargetNode: ClassDeclarationSyntax classDeclarationSyntax, TargetSymbol: INamedTypeSymbol namedTypeSymbol })
+		    && context is { TargetNode: ClassDeclarationSyntax classDeclarationSyntax, TargetSymbol: INamedTypeSymbol namedTypeSymbol })
 		{
 			return ClassParser.Parse(classDeclarationSyntax, namedTypeSymbol, context.Attributes, context.SemanticModel.Compilation);
 		}
@@ -253,9 +253,9 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		}
 
 		if (!headers.Any()
-				&& !bodies.Any()
-				&& !methodDefaultItems.Any()
-				&& classModel.RequestModifiers.Length == 0)
+		    && !bodies.Any()
+		    && !methodDefaultItems.Any()
+		    && classModel.RequestModifiers.Length == 0)
 		{
 			WriteMethodBodyWithoutHeaders(method, clientName, items, tokenText, classModel.RequestQueryParamSerializers, builder);
 		}
@@ -268,10 +268,10 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 		var optionalQueries = items
 			.Where(w => w.Location.Location == HttpLocation.Query
-									&& (w is { IsNullable: true, NullableAnnotation: NullableAnnotation.Annotated }
-										|| PathWriter.GetQueryParamSerializer(classModel.RequestQueryParamSerializers, w) != null)
-									|| w.Location.Location == HttpLocation.QueryMap
-									|| (w.Location.Location == HttpLocation.Raw && w.IsNullable))
+			            && (w is { IsNullable: true, NullableAnnotation: NullableAnnotation.Annotated }
+			                || PathWriter.GetQueryParamSerializer(classModel.RequestQueryParamSerializers, w) != null)
+			            || w.Location.Location == HttpLocation.QueryMap
+			            || (w.Location.Location == HttpLocation.Raw && w.IsNullable))
 			.ToList();
 
 		if (optionalQueries.Any())
@@ -368,6 +368,8 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 	private static void WriteMethodReturn(MethodModel method, ImmutableEquatableArray<ResponseDeserializerModel> responseDeserializers, string tokenText, SourceWriter builder)
 	{
+		Debug.WriteLine(responseDeserializers.Length);
+
 		if (!method.AllowAnyStatusCode)
 		{
 			builder.WriteLine();

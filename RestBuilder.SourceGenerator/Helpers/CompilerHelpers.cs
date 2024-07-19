@@ -357,6 +357,11 @@ public static class CompilerHelpers
 		return type.GetMembers().OfType<IMethodSymbol>();
 	}
 
+	public static IEnumerable<IFieldSymbol> GetFields(this ITypeSymbol type)
+	{
+		return type.GetMembers().OfType<IFieldSymbol>();
+	}
+
 	public static IEnumerable<IPropertySymbol> GetProperties(this ITypeSymbol type)
 	{
 		return type.GetMembers().OfType<IPropertySymbol>();

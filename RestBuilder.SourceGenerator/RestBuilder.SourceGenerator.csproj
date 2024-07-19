@@ -14,20 +14,17 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4">
+		<PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0-beta1.24318.1">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
-		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.10.0" />
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.0-2.final" />
 		<PackageReference Include="PolySharp" Version="1.14.1">
 		  <PrivateAssets>all</PrivateAssets>
 		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
+		<PackageReference Include="RestBuilder.Core" Version="0.1.0" PrivateAssets="all" GeneratePathProperty="true" />
 		<PackageReference Include="TypeShape.Roslyn" Version="0.10.0" PrivateAssets="all" GeneratePathProperty="true" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <ProjectReference Include="..\RestBuilder.Core\RestBuilder.Core.csproj" />
 	</ItemGroup>
 
 	<PropertyGroup>
@@ -39,6 +36,7 @@
 	<Target Name="GetDependencyTargetPaths">
 		<ItemGroup>
 			<TargetPathWithTargetPlatformMoniker Include="$(PkgTypeShape_Roslyn)\lib\netstandard2.0\TypeShape.Roslyn.dll" IncludeRuntimeDependency="false" />
+			<TargetPathWithTargetPlatformMoniker Include="$(PkgRestBuilder_Core)\lib\netstandard2.0\RestBuilder.Core.dll" IncludeRuntimeDependency="false"/>
 		</ItemGroup>
 	</Target>
 </Project>

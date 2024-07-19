@@ -4,6 +4,15 @@
     <TargetFramework>netstandard2.0</TargetFramework>
 		<LangVersion>12.0</LangVersion>
 		<Nullable>enable</Nullable>
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<Authors>Jan Tamis Kossen</Authors>
+		<Copyright></Copyright>
+		<PackageLicenseUrl></PackageLicenseUrl>
+		<RepositoryUrl>https://github.com/JanTamis/RestBuilder</RepositoryUrl>
+		<RepositoryType>Git</RepositoryType>
+		<Version>0.1.0-alpha</Version>
+		<Title>RestBuilder.Core</Title>
+		<PackageProjectUrl>https://github.com/JanTamis/RestBuilder</PackageProjectUrl>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">

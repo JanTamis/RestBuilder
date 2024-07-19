@@ -119,7 +119,7 @@ public static class PathWriter
 
 			builder.WriteLine($"handler.AppendFormatted({ParseFieldFormatted(query.Name, query.Namespace, query.Type, query.Location)});");
 
-			if (!hasQueries)
+			if (hasVariable)
 			{
 				builder.WriteLine();
 				builder.WriteLine("hasQueries = true;");
@@ -271,7 +271,7 @@ public static class PathWriter
 
 				using (builder.AppendIndentation($"foreach (var (name, value) in {querySerializer.Name}({keyName}, queryValue))"))
 				{
-					if (hasQueries)
+					if (hasVariable)
 					{
 						builder.WriteLine("handler.AppendLiteral(hasQueries ? \"&\" : \"?\");");
 					}
@@ -284,7 +284,7 @@ public static class PathWriter
 					builder.WriteLine("handler.AppendLiteral(\"=\");");
 					builder.WriteLine($"handler.AppendFormatted({BaseParseField("value", "System", "String", query.Location)});");
 
-					if (hasQueries)
+					if (hasVariable)
 					{
 						builder.WriteLine();
 						builder.WriteLine("hasQueries = true;");
@@ -324,7 +324,7 @@ public static class PathWriter
 
 		void AppendQueryItem(string fieldItem, string keyName, TypeModel? type)
 		{
-			if (!hasQueries)
+			if (!hasVariable)
 			{
 				builder.WriteLine("handler.AppendLiteral(\"&\");");
 			}
@@ -346,7 +346,7 @@ public static class PathWriter
 
 			builder.WriteLine($"handler.AppendFormatted({ParseFieldFormatted(fieldItem, type, query.Location)});");
 
-			if (hasQueries)
+			if (hasVariable)
 			{
 				builder.WriteLine();
 				builder.WriteLine("hasQueries = true;");
