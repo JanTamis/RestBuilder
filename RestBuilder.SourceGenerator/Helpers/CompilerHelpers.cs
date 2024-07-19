@@ -354,17 +354,29 @@ public static class CompilerHelpers
 
 	public static IEnumerable<IMethodSymbol> GetMethods(this ITypeSymbol type)
 	{
-		return type.GetMembers().OfType<IMethodSymbol>();
+		return type
+			.GetBaseTypes()
+			.SelectMany(s => s
+				.GetMembers()
+				.OfType<IMethodSymbol>());
 	}
 
 	public static IEnumerable<IFieldSymbol> GetFields(this ITypeSymbol type)
 	{
-		return type.GetMembers().OfType<IFieldSymbol>();
+		return type
+			.GetBaseTypes()
+			.SelectMany(s => s
+				.GetMembers()
+				.OfType<IFieldSymbol>());
 	}
 
 	public static IEnumerable<IPropertySymbol> GetProperties(this ITypeSymbol type)
 	{
-		return type.GetMembers().OfType<IPropertySymbol>();
+		return type
+			.GetBaseTypes()
+			.SelectMany(s => s
+				.GetMembers()
+				.OfType<IPropertySymbol>());
 	}
 
 	public static bool IsPartial(this IMethodSymbol method)
@@ -376,6 +388,11 @@ public static class CompilerHelpers
 
 	public static bool InheritsFrom<T>(this ITypeSymbol? type, Compilation compilation)
 	{
+		if (type.IsType<T>(compilation))
+		{
+			return true;
+		}
+
 		var baseType = type?.BaseType;
 
 		while (baseType != null)
@@ -424,6 +441,20 @@ public static class CompilerHelpers
 		}
 
 		return false;
+	}
+
+	public static IEnumerable<ITypeSymbol> GetBaseTypes(this ITypeSymbol typeSymbol)
+	{
+		yield return typeSymbol;
+
+		var baseType = typeSymbol.BaseType;
+
+		while (baseType is not null)
+		{
+			yield return baseType;
+
+			baseType = baseType.BaseType;
+		}
 	}
 
 	public static T GetValue<T>(this AttributeData attributes, int index, T defaultValue)
@@ -515,23 +546,7 @@ public static class CompilerHelpers
 		}
 	}
 
-	public static AttributeSyntax? FindAttributeByName(this MethodDeclarationSyntax methodDeclaration, string attributeName)
-	{
-		foreach (var attributeList in methodDeclaration.AttributeLists)
-		{
-			foreach (var attribute in attributeList.Attributes)
-			{
-				if (attribute.Name is IdentifierNameSyntax identifier && identifier.Identifier.Text == attributeName)
-				{
-					return attribute;
-				}
-			}
-		}
-
-		return null;
-	}
-
-	public static string GetFriendlyName(this Type type)
+	private static string GetFriendlyName(this Type type)
 	{
 		if (type == typeof(int))
 			return "int";
@@ -557,7 +572,7 @@ public static class CompilerHelpers
 		return $"{type.Namespace}.{type.Name}";
 	}
 
-	public static IEnumerable<object> GetActualConstuctorParams(this AttributeData attributeData)
+	private static IEnumerable<object> GetActualConstuctorParams(this AttributeData attributeData)
 	{
 		foreach (var arg in attributeData.ConstructorArguments)
 		{

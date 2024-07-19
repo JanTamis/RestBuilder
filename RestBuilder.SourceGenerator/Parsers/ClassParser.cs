@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
@@ -138,12 +139,12 @@ public static class ClassParser
 		}
 
 		return type.AllInterfaces
-			.Where(w => w.IsType<IEnumerable>(compilation))
+			.Where(w => w.IsType<IEnumerable>(compilation) && w.TypeArguments.Length == 1)
 			.Select(s => GetTypeModel(s.TypeArguments[0], compilation))
 			.FirstOrDefault();
 	}
 
-	private static TypeModel? GetTypeModel(ITypeSymbol? type, Compilation compilation)
+	private static TypeModel? GetTypeModel([NotNullIfNotNull(nameof(type))] ITypeSymbol? type, Compilation compilation)
 	{
 		switch (type)
 		{
@@ -393,9 +394,6 @@ public static class ClassParser
 			return false;
 		}
 
-		return x.Type == y.Type &&
-		       x.Namespace == y.Namespace;
-		// x.NullableAnnotation == y.NullableAnnotation &&
-		// x.IsNullable == y.IsNullable;
+		return x.Type == y.Type && x.Namespace == y.Namespace;
 	}
 }

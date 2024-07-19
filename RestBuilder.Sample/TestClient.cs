@@ -16,7 +16,7 @@ public partial class TestClient : IDisposable
 	[RequestQueryParamSerializer]
 	public static IEnumerable<KeyValuePair<string, string>> SerializeParameter<T>(string key, T value)
 	{
-		yield return KeyValuePair.Create(key, value!.ToString());
+		yield return KeyValuePair.Create(key, value?.ToString() ?? String.Empty);
 	}
 	
 	[Get("{username}/User")]

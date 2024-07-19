@@ -10,7 +10,6 @@ using RestBuilder.SourceGenerator.Parsers;
 using RestBuilder.SourceGenerator.Writers;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -368,8 +367,6 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 	private static void WriteMethodReturn(MethodModel method, ImmutableEquatableArray<ResponseDeserializerModel> responseDeserializers, string tokenText, SourceWriter builder)
 	{
-		Debug.WriteLine(responseDeserializers.Length);
-
 		if (!method.AllowAnyStatusCode)
 		{
 			builder.WriteLine();

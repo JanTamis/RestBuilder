@@ -12,3 +12,5 @@
 /RestBuilder.Sample/obj
 /RestBuilder.Core/obj
 /RestBuilder.Core/bin/Debug/netstandard2.0
+/RestBuilder.Core/bin/Debug
+/RestBuilder.Sample/bin/Debug/net8.0
