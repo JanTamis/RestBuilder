@@ -344,12 +344,8 @@ public static class CompilerHelpers
 		var taskType = compilation.GetTypeByMetadataName("System.Threading.Tasks.Task");
 		var taskOfTType = compilation.GetTypeByMetadataName("System.Threading.Tasks.Task`1");
 
-		if (typeSymbol.OriginalDefinition.Equals(taskType) || typeSymbol.OriginalDefinition.Equals(taskOfTType))
-		{
-			return true;
-		}
-
-		return false;
+		return SymbolEqualityComparer.Default.Equals(typeSymbol.OriginalDefinition, taskType) 
+		       || SymbolEqualityComparer.Default.Equals(typeSymbol.OriginalDefinition, taskOfTType);
 	}
 
 	public static IEnumerable<IMethodSymbol> GetMethods(this ITypeSymbol type)

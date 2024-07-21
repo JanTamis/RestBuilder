@@ -80,7 +80,8 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 				"System.Linq",
 				"System.Threading",
 				"System.Threading.Tasks",
-				"System.Runtime.CompilerServices"
+				"System.Runtime.CompilerServices",
+				"RestBuilder.Core.Builders",
 			])
 			.Where(w => !String.IsNullOrEmpty(w))
 			.Distinct()
@@ -97,28 +98,15 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 	{
 		var hasHeaders = source.Attributes.Any(a => a.Location == HttpLocation.Header);
 
-		if (compilation.Options.NullableContextOptions != NullableContextOptions.Enable)
-		{
-			builder.WriteLine($$"""
-					
-				namespace {{source.Namespace}};
+		builder.WriteLine($$"""
+				
+			namespace {{source.Namespace}};
 
-				#nullable enable
+			#nullable enable
 
-				public partial class {{source.Name}}
-				{
-				""");
-		}
-		else
-		{
-			builder.WriteLine($$"""
-					
-				namespace {{source.Namespace}};
-
-				public partial class {{source.Name}}
-				{
-				""");
-		}
+			public partial class {{source.Name}}
+			{
+			""");
 
 		if (source.NeedsClient)
 		{
@@ -241,14 +229,28 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			.Where(w => w.Location.Location == HttpLocation.Body)
 			.ToList();
 
+		var optionalQueries = items
+			.Where(w => w.Location.Location == HttpLocation.Query
+			            && (w is { IsNullable: true, NullableAnnotation: NullableAnnotation.Annotated }
+			                || PathWriter.GetQueryParamSerializer(classModel.RequestQueryParamSerializers, w) != null)
+			            || w.Location.Location == HttpLocation.QueryMap
+			            || (w.Location.Location == HttpLocation.Raw && w.IsNullable))
+			.ToList();
+
 		if (requiredParameters.Any())
 		{
+			builder.WriteLine("// Handle required parameters");
 			foreach (var parameter in requiredParameters)
 			{
 				builder.WriteLine($"ArgumentNullException.ThrowIfNull({parameter.Name});");
 			}
 
 			builder.WriteLine();
+		}
+
+		if (optionalQueries.Any())
+		{
+			PathWriter.WritePath(method, classModel.RequestQueryParamSerializers, optionalQueries, builder);
 		}
 
 		if (!headers.Any()
@@ -265,22 +267,16 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 		WriteMethodReturn(method, classModel.ResponseDeserializers, tokenText, builder);
 
-		var optionalQueries = items
-			.Where(w => w.Location.Location == HttpLocation.Query
-			            && (w is { IsNullable: true, NullableAnnotation: NullableAnnotation.Annotated }
-			                || PathWriter.GetQueryParamSerializer(classModel.RequestQueryParamSerializers, w) != null)
-			            || w.Location.Location == HttpLocation.QueryMap
-			            || (w.Location.Location == HttpLocation.Raw && w.IsNullable))
-			.ToList();
-
-		if (optionalQueries.Any())
-		{
-			PathWriter.WriteCreatePathMethod(method, classModel.RequestQueryParamSerializers, optionalQueries, builder);
-		}
+		// if (optionalQueries.Any())
+		// {
+		// 	PathWriter.WriteCreatePathMethod(method, classModel.RequestQueryParamSerializers, optionalQueries, builder);
+		// }
 	}
 
 	private static void WriteMethodBodyWithoutHeaders(MethodModel method, string clientName, IEnumerable<IType> items, string tokenText, ImmutableEquatableArray<RequestQueryParamSerializerModel> queryParamSerializers, SourceWriter builder)
 	{
+		builder.WriteLine($"// Send the {method.Method.Method ?? "Get"} request");
+		
 		if (method.ReturnTypeName is nameof(HttpResponseMessage))
 		{
 			builder.WriteLine($"var response = await {clientName}.{method.Method.Method ?? "Get"}Async({PathWriter.ParsePath(method.Path, items, queryParamSerializers)}, {tokenText});");
@@ -297,6 +293,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 	private static void WriteMethodBodyWithHeaders(MethodModel method, string clientName, IEnumerable<IType> items, string tokenText, ILookup<bool, IType> headers, Dictionary<string, LocationAttributeModel> defaultItems, IType? body, ClassModel classModel, ImmutableEquatableArray<RequestQueryParamSerializerModel> queryParamSerializers, SourceWriter builder)
 	{
+		builder.WriteLine("// Create the request");
 		builder.WriteLine($"using var request = new HttpRequestMessage(HttpMethod.{method.Method.Method ?? "Get"}, {PathWriter.ParsePath(method.Path, items, queryParamSerializers)});");
 
 		var defaultHeaders = defaultItems
@@ -306,6 +303,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 		if (headers[false].Any() || defaultHeaders.Any())
 		{
 			builder.WriteLine();
+			builder.WriteLine("// Add headers");
 		}
 
 		foreach (var header in headers[false])
@@ -334,6 +332,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 		if (classModel.RequestModifiers.Length > 0)
 		{
+			builder.WriteLine("// Invoke the request modifiers");
 			foreach (var requestModifier in classModel.RequestModifiers)
 			{
 				var awaitPrefix = requestModifier.IsAsync
@@ -350,6 +349,8 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			builder.WriteLine();
 		}
 
+		builder.WriteLine($"// Send the {method.Method.Method ?? "Get"} request");
+		
 		if (method.ReturnTypeName is nameof(HttpResponseMessage))
 		{
 			builder.WriteLine($"var response = await {clientName}.SendAsync(request, {tokenText});");
@@ -411,7 +412,6 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 
 				builder.WriteLine();
 				builder.WriteLine($"return {awaitPrefix}{deserializer.Name}<{method.ReturnType.Name}>(response{cancellationTokenSuffix});");
-
 
 				return;
 			}

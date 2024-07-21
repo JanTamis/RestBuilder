@@ -16,14 +16,14 @@ public partial class TestClient : IDisposable
 	[RequestQueryParamSerializer]
 	public static IEnumerable<KeyValuePair<string, string>> SerializeParameter<T>(string key, T value)
 	{
-		yield return KeyValuePair.Create(key, value?.ToString() ?? String.Empty);
+		yield return KeyValuePair.Create(key, value?.ToString());
 	}
 	
 	[Get("{username}/User")]
 	[Header("Authorization", "Bearer 123")]
 	public partial ValueTask<string> GetUserAsync(
 		[Path("username")] string password,
-		[Body] string body,
+		[Query] string? body,
 		[QueryMap(UrlEncode = false)] Dictionary<string, int> name,
 		CancellationToken token);
 
@@ -40,14 +40,14 @@ public partial class TestClient : IDisposable
 	}
 
 	[RequestBodySerializer]
-	private HttpContent SerializeString(string body)
+	private static HttpContent SerializeString(string body)
 	{
 		return new StringContent(body);
 	}
 
-	// [HttpClientInitializer]
-	// public static HttpClient CreateClient()
-	// {
-	// 	return new HttpClient();
-	// }
+	[HttpClientInitializer]
+	public static HttpClient CreateClient()
+	{
+		return new HttpClient();
+	}
 }

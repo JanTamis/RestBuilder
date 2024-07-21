@@ -44,8 +44,7 @@ public static class ClassParser
 			RequestQueryParamSerializers = GetRequestQueryParamSerializerModels(classSymbol, compilation),
 			HttpClientInitializer = GetHttpClientInitializer(classSymbol, compilation),
 			BaseAddress = baseAddress,
-			Attributes = GetLocationAttributes(classSymbol.GetAttributes(), HttpLocation.None)
-				.ToImmutableEquatableArray(),
+			Attributes = GetLocationAttributes(classSymbol.GetAttributes(), HttpLocation.None),
 			Methods = GetMethods(classSymbol, compilation, allowAnyStatusCode),
 			Properties = GetProperties(classSymbol),
 		};
@@ -98,7 +97,7 @@ public static class ClassParser
 			});
 	}
 
-	private static IEnumerable<LocationAttributeModel> GetLocationAttributes(ImmutableArray<AttributeData> attributes, HttpLocation defaultLocation)
+	private static ImmutableEquatableArray<LocationAttributeModel> GetLocationAttributes(ImmutableArray<AttributeData> attributes, HttpLocation defaultLocation)
 	{
 		return attributes
 			.Where(w => w.AttributeClass?.ContainingNamespace?.ToString() == "RestBuilder.Core.Attributes")
@@ -118,7 +117,8 @@ public static class ClassParser
 				Name = y.GetValue<string?>(0, null) ?? y.GetValue<string?>("Name", null),
 				Value = y.GetValue<string?>(1, null) ?? y.GetValue<string?>("Value", null),
 				UrlEncode = y.GetValue("UrlEncode", true)
-			});
+			})
+			.ToImmutableEquatableArray();
 	}
 
 	private static TypeModel? GetCollectionItemType(ITypeSymbol type, Compilation compilation)
@@ -369,7 +369,8 @@ public static class ClassParser
 		return classSymbol
 			.GetMethods()
 			.Where(w => w.HasAttribute<RequestQueryParamSerializerAttribute>(compilation)
-			            && w.ReturnType.IsType<IEnumerable<KeyValuePair<string, string>>>(compilation)
+			            && (w.ReturnType.IsType<IEnumerable<KeyValuePair<string, string>>>(compilation)
+										|| w.ReturnType.IsType<IEnumerable<KeyValuePair<string, string?>>>(compilation))
 			            && w.Parameters.Length >= 2
 			            && w.Parameters[0].Type.IsType<string>(compilation))
 			.Select(s => new RequestQueryParamSerializerModel

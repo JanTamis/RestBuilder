@@ -5,6 +5,7 @@
 		<Nullable>enable</Nullable>
 		<RootNamespace>RestBuilder.Sample</RootNamespace>
 		<LangVersion>default</LangVersion>
+		<IsPackable>false</IsPackable>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -12,6 +13,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="RestBuilder.Core" Version="0.1.0" />
+	  <PackageReference Include="RestBuilder.Core" Version="0.2.0-alpha" />
 	</ItemGroup>
 </Project>

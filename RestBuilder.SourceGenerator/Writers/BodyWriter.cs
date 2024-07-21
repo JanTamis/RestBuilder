@@ -33,6 +33,8 @@ public static class BodyWriter
 			}
 		}
 
+		builder.WriteLine($"// Set the content of the request");
+
 		if (body.IsType<string>())
 		{
 			builder.WriteLine($"request.Content = new StringContent({body.Name});");
@@ -64,6 +66,7 @@ public static class BodyWriter
 			? $", {tokenText}"
 			: String.Empty;
 
+		builder.WriteLine($"// Set the content of the request using {bodySerializer.Name}");
 		builder.WriteLine($"request.Content = {awaitPrefix}{bodySerializer.Name}({body.Name}{cancellationTokenSuffix});");
 	}
 }
