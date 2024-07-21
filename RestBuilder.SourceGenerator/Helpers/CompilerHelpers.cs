@@ -127,6 +127,19 @@ public static class CompilerHelpers
 		return symbol?.ToString() == type.GetFriendlyName();
 	}
 
+	public static bool IsTypeNullable<T>(this ISymbol? symbol, Compilation compilation)
+	{
+		var type = typeof(T);
+		var metadataSymbol = compilation.GetTypeByMetadataName(type.FullName!);
+
+		if (metadataSymbol != null)
+		{
+			return SymbolEqualityComparer.IncludeNullability.Equals(symbol, metadataSymbol);
+		}
+
+		return symbol?.ToString() == type.GetFriendlyName();
+	}
+
 	public static bool IsType<T>(this IType symbol)
 	{
 		var type = typeof(T);

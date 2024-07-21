@@ -369,8 +369,7 @@ public static class ClassParser
 		return classSymbol
 			.GetMethods()
 			.Where(w => w.HasAttribute<RequestQueryParamSerializerAttribute>(compilation)
-			            && (w.ReturnType.IsType<IEnumerable<KeyValuePair<string, string>>>(compilation)
-										|| w.ReturnType.IsType<IEnumerable<KeyValuePair<string, string?>>>(compilation))
+			            && w.ReturnType.IsTypeNullable<IEnumerable<KeyValuePair<string, string?>>>(compilation)
 			            && w.Parameters.Length >= 2
 			            && w.Parameters[0].Type.IsType<string>(compilation))
 			.Select(s => new RequestQueryParamSerializerModel
