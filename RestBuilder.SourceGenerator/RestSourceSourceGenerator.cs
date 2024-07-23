@@ -235,6 +235,7 @@ public class RestSourceSourceGenerator : IIncrementalGenerator
 			                || PathWriter.GetQueryParamSerializer(classModel.RequestQueryParamSerializers, w) != null)
 			            || w.Location.Location == HttpLocation.QueryMap
 			            || (w.Location.Location == HttpLocation.Raw && w.IsNullable))
+			.OfType<ParameterModel>()
 			.ToList();
 
 		if (requiredParameters.Any())

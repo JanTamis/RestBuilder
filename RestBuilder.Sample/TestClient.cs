@@ -13,7 +13,7 @@ namespace RestBuilder.Sample;
 [AllowAnyStatusCode]
 public partial class TestClient : IDisposable
 {
-	[RequestQueryParamSerializer]
+	// [RequestQueryParamSerializer]
 	public static IEnumerable<KeyValuePair<string, string>> SerializeParameter<T>(string key, T value)
 	{
 		yield return KeyValuePair.Create(key, value?.ToString());

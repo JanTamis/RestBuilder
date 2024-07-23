@@ -17,58 +17,149 @@ public static class PathWriter
 {
 	private static readonly Regex HoleRegex = new Regex(@"\{\d+(:[^}]*)?\}");
 
-	public static void WritePath(MethodModel method, ImmutableEquatableArray<RequestQueryParamSerializerModel> queryParamSerializers, List<IType> optionalQueries, SourceWriter builder)
+	public static void WritePath(MethodModel method, ImmutableEquatableArray<RequestQueryParamSerializerModel> queryParamSerializers, List<ParameterModel> optionalQueries, SourceWriter builder)
+	{
+		var path = GetPath(method.Path, method.Parameters, queryParamSerializers);
+
+		builder.WriteLine("// Create the url");
+		builder.WriteLine($"var builder = new UrlBuilder($\"{path}\");");
+
+		AppendQueries(queryParamSerializers, optionalQueries, builder);
+		AppendQueryMaps(queryParamSerializers, optionalQueries, builder);
+
+		builder.WriteLine();
+	}
+
+	private static void AppendQueryMaps(ImmutableEquatableArray<RequestQueryParamSerializerModel> queryParamSerializers, List<ParameterModel> optionalQueries, SourceWriter builder)
+	{
+		var queryMaps = optionalQueries
+			.Where(w => w.Location.Location == HttpLocation.QueryMap)
+			.Select(s => new
+			{
+				Type = s,
+				QuerySerializer = GetQueryParamSerializer(queryParamSerializers, s.GenericTypes[1]),
+			})
+			.OrderBy(o => o.QuerySerializer is null);
+
+		foreach (var queryMap in queryMaps)
+		{
+			var querySerializer = queryMap.QuerySerializer;
+			var type = queryMap.Type;
+
+			var encode = type.Location.UrlEncode && NeedsUrlEncode(type.Namespace, type.Type)
+				? String.Empty
+				: ", false";
+
+			if (querySerializer != null)
+			{
+				builder.WriteLine();
+
+				var queryName = type.IsCollection ? "query" : type.Name;
+
+				using (builder.AppendIndentationWithCondition($"foreach (var query in {type.Name})", () => type.IsCollection))
+				{
+					using (builder.AppendIndentation($"foreach (var item in {querySerializer.Name}(\"{type.Location.Name ?? type.Name}\", {queryName}))"))
+					{
+						builder.WriteLine($"builder.AppendQuery(item.Key, item.Value{encode});");
+					}
+				}
+			}
+			else
+			{
+				if (type.IsCollection)
+				{
+					builder.WriteLine();
+
+					using (builder.AppendIndentation($"foreach (var query in {type.Name})"))
+					{
+						if (type is { IsNullable: true, NullableAnnotation: NullableAnnotation.Annotated })
+						{
+							AppendContinue(builder, "query");
+						}
+
+						builder.WriteLine($"builder.AppendQuery(\"{type.Location.Name ?? type.Name}\", query{encode});");
+					}
+				}
+				else
+				{
+					using (builder.AppendIndentation($"foreach (var item in {type.Name})"))
+					{
+						if (type is { IsNullable: true, NullableAnnotation: NullableAnnotation.Annotated })
+						{
+							AppendContinue(builder, "item");
+						}
+
+						builder.WriteLine($"builder.AppendQuery(item.Key, item.Value{encode});");
+					}
+				}
+			}
+		}
+	}
+
+	private static void AppendQueries(ImmutableEquatableArray<RequestQueryParamSerializerModel> queryParamSerializers, List<ParameterModel> optionalQueries, SourceWriter builder)
 	{
 		var queries = optionalQueries
 			.Where(w => w.Location.Location == HttpLocation.Query)
 			.Select(s => new
 			{
 				Type = s,
-				QuerySerializer = GetQueryParamSerializer(queryParamSerializers, s),
+				QuerySerializer = GetQueryParamSerializer(queryParamSerializers, s.IsCollection
+					? s.CollectionItemType
+					: s),
 			})
-			.OrderBy(o => o.QuerySerializer is null);
-		
-		var path = GetPath(method.Path, method.Parameters, queryParamSerializers);
-		
-		builder.WriteLine("// Create the url");
-		builder.WriteLine($"var builder = new UrlBuilder($\"{path}\");");
-		
+			.OrderBy(o => o.QuerySerializer is null)
+			.ThenBy(t => t.Type.IsCollection);
+
 		foreach (var query in queries)
 		{
 			var querySerializer = query.QuerySerializer;
+			var type = query.Type;
 
-			if (querySerializer is null)
+			var encode = type.Location.UrlEncode && NeedsUrlEncode(type.Namespace, type.Type)
+				? String.Empty
+				: ", false";
+
+			if (querySerializer != null)
 			{
-				if (query.Type.Location.UrlEncode && NeedsUrlEncode(query.Type.Namespace, query.Type.Type))
+				builder.WriteLine();
+				
+				var queryName = type.IsCollection ? "query" : type.Name;
+
+				using (builder.AppendIndentationWithCondition($"foreach (var query in {type.Name})", () => type.IsCollection))
 				{
-					builder.WriteLine($"builder.AppendQuery(\"{query.Type.Location.Name ?? query.Type.Name}\", {query.Type.Name});");
-				}
-				else
-				{
-					builder.WriteLine($"builder.AppendQuery(\"{query.Type.Location.Name ?? query.Type.Name}\", {query.Type.Name}, false);");
+					using (builder.AppendIndentation($"foreach (var item in {querySerializer.Name}(\"{type.Location.Name ?? type.Name}\", {queryName}))"))
+					{
+						builder.WriteLine($"builder.AppendQuery(item.Key, item.Value{encode});");
+					}
 				}
 			}
 			else
 			{
-				builder.WriteLine();
-
-				using (builder.AppendIndentation($"foreach (var query in {querySerializer.Name}(\"{query.Type.Location.Name ?? query.Type.Name}\", {query.Type.Name}))"))
+				if (type.IsCollection)
 				{
-					if (query.Type.Location.UrlEncode && NeedsUrlEncode(query.Type.Namespace, query.Type.Type))
+					builder.WriteLine();
+
+					using (builder.AppendIndentation($"foreach (var query in {type.Name})"))
 					{
-						builder.WriteLine($"builder.AppendQuery(query.Key, query.Value);");
+						if (type is { IsNullable: true, NullableAnnotation: NullableAnnotation.Annotated })
+						{
+							AppendContinue(builder, "query");
+						}
+
+						builder.WriteLine($"builder.AppendQuery(\"{type.Location.Name ?? type.Name}\", query{encode});");
 					}
-					else
+				}
+				else
+				{
+					using (builder.AppendnullCheck(type))
 					{
-						builder.WriteLine($"builder.AppendQuery(name, value, false);");
+						builder.WriteLine($"builder.AppendQuery(\"{type.Location.Name ?? type.Name}\", {type.Name}{encode});");
 					}
 				}
 			}
 		}
-		
-		builder.WriteLine();
 	}
-	
+
 	// public static void WriteCreatePathMethod(MethodModel method, ImmutableEquatableArray<RequestQueryParamSerializerModel> queryParamSerializers, List<IType> optionalQueries, SourceWriter builder)
 	// {
 	// 	var hasQueries = method.Path.Contains("?");
