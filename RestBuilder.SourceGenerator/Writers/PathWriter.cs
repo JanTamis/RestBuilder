@@ -54,13 +54,21 @@ public static class PathWriter
 			{
 				builder.WriteLine();
 
-				var queryName = type.IsCollection ? "query" : type.Name;
-
-				using (builder.AppendIndentationWithCondition($"foreach (var query in {type.Name})", () => type.IsCollection))
+				using (builder.AppendIndentation($"foreach (var query in {type.Name})"))
 				{
-					using (builder.AppendIndentation($"foreach (var item in {querySerializer.Name}(\"{type.Location.Name ?? type.Name}\", {queryName}))"))
+					using (builder.AppendIndentationWithCondition("foreach (var queryItem in query.Value)", () => type.GenericTypes[1].IsCollection))
 					{
-						builder.WriteLine($"builder.AppendQuery(item.Key, item.Value{encode});");
+						var queryName = type.GenericTypes[1].IsCollection ? "queryItem" : "query";
+						
+						if (type.GenericTypes[1] is { IsNullable: true, NullableAnnotation: NullableAnnotation.Annotated, IsCollection: true })
+						{
+							AppendContinue(builder, "queryItem");
+						}
+					
+						using (builder.AppendIndentation($"foreach (var item in {querySerializer.Name}(query.Key, {queryName}))"))
+						{
+							builder.WriteLine($"builder.AppendQuery(item.Key, item.Value{encode});");
+						}
 					}
 				}
 			}
@@ -77,7 +85,15 @@ public static class PathWriter
 							AppendContinue(builder, "query");
 						}
 
-						builder.WriteLine($"builder.AppendQuery(\"{type.Location.Name ?? type.Name}\", query{encode});");
+						using (builder.AppendIndentation("foreach (var item in query.Value)"))
+						{
+							if (type.GenericTypes[1] is { IsNullable: true, NullableAnnotation: NullableAnnotation.Annotated })
+							{
+								AppendContinue(builder, "item");
+							}
+
+							builder.WriteLine($"builder.AppendQuery(query.Key, item{encode});");
+						}
 					}
 				}
 				else

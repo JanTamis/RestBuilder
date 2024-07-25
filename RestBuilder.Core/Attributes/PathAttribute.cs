@@ -41,8 +41,7 @@ public sealed class PathAttribute : Attribute
 	/// <summary>
 	/// Initialises a new instance of the <see cref="PathAttribute"/> class
 	/// </summary>
-	public PathAttribute()
-		: this(PathSerializationMethod.Default)
+	public PathAttribute() : this(PathSerializationMethod.Default)
 	{
 	}
 
@@ -60,8 +59,7 @@ public sealed class PathAttribute : Attribute
 	/// Initialises a new instance of the <see cref="PathAttribute"/> class, with the given name
 	/// </summary>
 	/// <param name="name">Placeholder in the path to replace</param>
-	public PathAttribute(string name)
-		: this(name, PathSerializationMethod.Default)
+	public PathAttribute(string name) : this(name, PathSerializationMethod.Default)
 	{
 	}
 

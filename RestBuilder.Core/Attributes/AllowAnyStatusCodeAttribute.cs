@@ -16,8 +16,7 @@ public sealed class AllowAnyStatusCodeAttribute : Attribute
 	/// <summary>
 	/// Initialises a new instance of the <see cref="AllowAnyStatusCodeAttribute"/> class, which does allow any status code
 	/// </summary>
-	public AllowAnyStatusCodeAttribute()
-		: this(true)
+	public AllowAnyStatusCodeAttribute() : this(true)
 	{
 	}
 

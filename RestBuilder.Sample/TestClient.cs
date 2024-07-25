@@ -13,7 +13,7 @@ namespace RestBuilder.Sample;
 [AllowAnyStatusCode]
 public partial class TestClient : IDisposable
 {
-	// [RequestQueryParamSerializer]
+	[RequestQueryParamSerializer]
 	public static IEnumerable<KeyValuePair<string, string>> SerializeParameter<T>(string key, T value)
 	{
 		yield return KeyValuePair.Create(key, value?.ToString());
@@ -23,7 +23,7 @@ public partial class TestClient : IDisposable
 	[Header("Authorization", "Bearer 123")]
 	public partial ValueTask<string> GetUserAsync(
 		[Path("username")] string password,
-		[Query] string? body,
+		[Query] string?[] body,
 		[QueryMap(UrlEncode = false)] Dictionary<string, int> name,
 		CancellationToken token);
 
