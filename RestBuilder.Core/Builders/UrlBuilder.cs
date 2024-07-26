@@ -40,14 +40,14 @@ public struct UrlBuilder
 			AppendChar(_hasQueries ? '&' : '?');
 		}
 
-		AppendLiteral(key);
+		AppendQueryLiteral(key);
 		AppendChar('=');
 
 		if (urlEncode && NeedsUrlEncode<T>())
 		{
 			var valueString = Uri.EscapeDataString(value?.ToString() ?? String.Empty);
 
-			AppendLiteral(valueString);
+			AppendQueryLiteral(valueString);
 		}
 		else
 		{
@@ -55,7 +55,7 @@ public struct UrlBuilder
 			{
 				var written = 0;
 
-				while (!spanFormattable.TryFormat(_buffer.AsSpan(_position), out written, null, null))
+				while (!spanFormattable.TryFormat(GetFreeSpan(), out written, null, null))
 				{
 					Grow();
 				}
@@ -65,7 +65,7 @@ public struct UrlBuilder
 				return;
 			}
 
-			AppendLiteral(value?.ToString() ?? String.Empty);
+			AppendQueryLiteral(value?.ToString() ?? String.Empty);
 		}
 
 		_hasQueries = true;
@@ -82,7 +82,7 @@ public struct UrlBuilder
 	/// <returns>A <see cref="Uri"/> object representing the constructed URL.</returns>
 	public Uri ToUriAndClear()
 	{
-		var result = new Uri(new string(_buffer, 0, _position), dontEscape: true);
+		var result = new Uri(ToString(), dontEscape: true);
 
 		ArrayPool<char>.Shared.Return(_buffer);
 
@@ -92,11 +92,39 @@ public struct UrlBuilder
 		return result;
 	}
 
+	public void AppendQueryLiteral(string value)
+	{
+		var span = value
+			.AsSpan()
+			.Trim(['?', '&']);
+
+		AppendChar(_hasQueries ? '&' : '?');
+
+		while (!span.TryCopyTo(GetFreeSpan()))
+		{
+			Grow();
+		}
+
+		_position += span.Length;
+	}
+
+	public override readonly string ToString()
+	{
+		return _buffer
+			.AsSpan(0, _position)
+			.ToString();
+	}
+
 	private void AppendLiteral(string value)
 	{
-		value.CopyTo(0, _buffer, _position, value.Length);
+		var freeSpan = GetFreeSpan();
 
-		_position += value.Length;
+		if (freeSpan.Length < value.Length)
+		{
+			Grow();
+		}
+
+		value.CopyTo(freeSpan);
 	}
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -122,16 +150,22 @@ public struct UrlBuilder
 	private static bool NeedsUrlEncode<T>()
 	{
 		return typeof(T) != typeof(short)
-		       && typeof(T) != typeof(int)
-		       && typeof(T) != typeof(long)
-		       && typeof(T) != typeof(ushort)
-		       && typeof(T) != typeof(uint)
-		       && typeof(T) != typeof(ulong)
-		       && typeof(T) != typeof(float)
-		       && typeof(T) != typeof(double)
-		       && typeof(T) != typeof(decimal)
-		       && typeof(T) != typeof(bool)
-		       && typeof(T) != typeof(char);
+					 && typeof(T) != typeof(int)
+					 && typeof(T) != typeof(long)
+					 && typeof(T) != typeof(ushort)
+					 && typeof(T) != typeof(uint)
+					 && typeof(T) != typeof(ulong)
+					 && typeof(T) != typeof(float)
+					 && typeof(T) != typeof(double)
+					 && typeof(T) != typeof(decimal)
+					 && typeof(T) != typeof(bool)
+					 && typeof(T) != typeof(char);
+	}
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public readonly Span<char> GetFreeSpan()
+	{
+		return _buffer.AsSpan(_position);
 	}
 
 	/// <summary>
@@ -179,17 +213,17 @@ public struct UrlBuilder
 			switch (value)
 			{
 				case ISpanFormattable spanFormattable:
-				{
-					var written = 0;
-
-					while (!spanFormattable.TryFormat(Buffer.AsSpan(Position), out written, format, null))
 					{
-						Grow();
-					}
+						var written = 0;
 
-					Position += written;
-					break;
-				}
+						while (!spanFormattable.TryFormat(Buffer.AsSpan(Position), out written, format, null))
+						{
+							Grow();
+						}
+
+						Position += written;
+						break;
+					}
 
 				case IFormattable formattable:
 					AppendLiteral(formattable.ToString(format, null));
